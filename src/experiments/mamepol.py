@@ -10,13 +10,13 @@ from src.envs.ant import Ant
 from src.envs.hand_reach import HandReach
 from src.envs.humanoid import Humanoid
 from src.envs.discretizer import Discretizer
-from src.envs.rooms import Rooms
+from src.envs.rooms import Rooms, OpenRooms, ConstRooms
 from src.envs.secret_rooms import SecretRooms
 from src.envs.push_box import PushBox
 from src.envs.wrappers import ErgodicEnv
 from src.algorithms.mepol import mepol
 from src.algorithms.mamepol import mamepol
-from src.policy import GaussianPolicy, train_supervised
+from src.policy import GaussianPolicy, DiscretePolicy
 
 
 
@@ -85,119 +85,40 @@ Experiments specifications
 
 """
 exp_spec = {
-    'MountainCar': {
-        'env_create': lambda: ErgodicEnv(MountainCarContinuous()),
-        'discretizer_create': lambda env: Discretizer([[env.min_position, env.max_position], [-env.max_speed, env.max_speed]], [12, 11]),
-        'hidden_sizes': [300, 300],
-        'activation': nn.ReLU,
-        'log_std_init': -0.5,
-        'eps': 1e-15,
-        'heatmap_interp': 'spline16',
-        'heatmap_cmap': 'Blues',
-        'heatmap_labels': ('Position', 'Velocity')
-    },
-
-    'GridWorld': {
-        'env_create': lambda: ErgodicEnv(GridWorldContinuous()),
-        'discretizer_create': lambda env: Discretizer([[-env.dim, env.dim], [-env.dim, env.dim]], [20, 20]),
-        'hidden_sizes': [300, 300],
-        'activation': nn.ReLU,
-        'log_std_init': -1.5,
-        'eps': 0,
-        'heatmap_interp': None,
-        'heatmap_cmap': 'Blues',
-        'heatmap_labels': ('X', '-Y')
-    },
-
-    'Ant': {
-        'env_create': lambda: ErgodicEnv(Ant()),
-        'discretizer_create': lambda env: Discretizer([[-12.0, 12.0], [-12.0, 12.0]], [40, 40], lambda s: [s[0], s[1]]),
-        'hidden_sizes': [400, 300],
-        'activation': nn.ReLU,
-        'log_std_init': -0.5,
-        'eps': 0,
-        'state_filter': list(range(7)),
-        'heatmap_interp': 'spline16',
-        'heatmap_cmap': 'Blues',
-        'heatmap_labels': ('X', 'Y')
-    },
-
-    # Higher-level
-    'AntXY': {
-        'env_create': lambda: ErgodicEnv(Ant()),
-        'discretizer_create': lambda env: Discretizer([[-12.0, 12.0], [-12.0, 12.0]], [40, 40], lambda s: [s[0], s[1]]),
-        'hidden_sizes': [400, 300],
-        'activation': nn.ReLU,
-        'log_std_init': -0.5,
-        'eps': 0,
-        'state_filter': list(range(2)),
-        'heatmap_interp': 'spline16',
-        'heatmap_cmap': 'Blues',
-        'heatmap_labels': ('X', 'Y')
-    },
-
-    'Humanoid': {
-        'env_create': lambda: ErgodicEnv(Humanoid()),
-        'discretizer_create': lambda env: Discretizer([[-12.0, 12.0], [-12.0, 12.0]], [40, 40], lambda s: [s[0], s[1]]),
-        'hidden_sizes': [400, 300],
-        'activation': nn.ReLU,
-        'log_std_init': -0.5,
-        'eps': 0,
-        'state_filter': list(range(24)),
-        'heatmap_interp': 'spline16',
-        'heatmap_cmap': 'Blues',
-        'heatmap_labels': ('X', 'Y')
-    },
-
-    # Higher-level
-    'HumanoidXYZ': {
-        'env_create': lambda: ErgodicEnv(Humanoid()),
-        'discretizer_create': lambda env: Discretizer([[-12.0, 12.0], [-12.0, 12.0]], [40, 40], lambda s: [s[0], s[1]]),
-        'hidden_sizes': [400, 300],
-        'activation': nn.ReLU,
-        'log_std_init': -0.5,
-        'eps': 0,
-        'state_filter': list(range(3)),
-        'heatmap_interp': 'spline16',
-        'heatmap_cmap': 'Blues',
-        'heatmap_labels': ('X', 'Y')
-    },
-
-    'HandReach': {
-        'env_create': lambda: ErgodicEnv(HandReach()),
-        'discretizer_create': lambda env: None,
-        'hidden_sizes': [400, 300],
-        'activation': nn.ReLU,
-        'log_std_init': -0.5,
-        'eps': 0,
-        'state_filter': list(range(24))
-    },
     # Multi-Agent Environments
     'Room': {
-        'env_create': lambda: Rooms(H=300, grid_size=30, n_actions=4, n_agents=2),
+        'env_create': lambda: Rooms(H=1000, grid_size=10, n_actions=4, n_agents=2),
         'discretizer_create': lambda env: None,
-        'hidden_sizes': [400, 300],
+        'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
-        'log_std_init': -0.5,
-        'eps': 0,
+        'state_filter': None
+    },
+    'OpenRooms': {
+        'env_create': lambda: OpenRooms(H=1000, grid_size=10, n_actions=4, n_agents=2),
+        'discretizer_create': lambda env: None,
+        'hidden_sizes': [64, 64],
+        'activation': nn.ReLU,
+        'state_filter': None
+    },
+    'ConstRooms': {
+        'env_create': lambda: ConstRooms(H=1000, grid_size=10, n_actions=4, n_agents=2),
+        'discretizer_create': lambda env: None,
+        'hidden_sizes': [64, 64],
+        'activation': nn.ReLU,
         'state_filter': None
     },
     'Secret_Room': {
         'env_create': lambda: SecretRooms(H=300, grid_size=25, n_actions=4, n_agents=2),
         'discretizer_create': lambda env: None,
-        'hidden_sizes': [400, 300],
+        'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
-        'log_std_init': -0.5,
-        'eps': 0,
         'state_filter': None
     },
     'Push_Box': {
         'env_create': lambda: PushBox(H=300, grid_size=15, n_actions=4, n_agents=2),
         'discretizer_create': lambda env: None,
-        'hidden_sizes': [400, 300],
+        'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
-        'log_std_init': -0.5,
-        'eps': 0,
         'state_filter': None
     },
 
@@ -212,28 +133,19 @@ if spec is None:
 env = spec['env_create']()
 discretizer = spec['discretizer_create'](env)
 state_filter = spec.get('state_filter')
-eps = spec['eps']
 
-def create_policy(is_behavioral=False):
+def create_policy():
 
-    policy = GaussianPolicy(
+    policy = DiscretePolicy(
         num_features=env.num_features,
         hidden_sizes=spec['hidden_sizes'],
         action_dim=env.action_space.shape[0],
-        activation=spec['activation'],
-        log_std_init=spec['log_std_init']
+        activation=spec['activation']
     )
-
-    if is_behavioral and args.zero_mean_start:
-        policy = train_supervised(env, policy, train_steps=100, batch_size=5000)
-
     return policy
 
 
-exp_name = f"env={args.env},z_mu_start={args.zero_mean_start},k={args.k},kl_thresh={args.kl_threshold}," \
-           f"max_off_iters={args.max_off_iters},num_traj={args.num_trajectories},traj_len={args.trajectory_length}," \
-           f"lr={args.learning_rate},opt={args.optimizer},fe_traj_sc={args.full_entropy_traj_scale},fe_k={args.full_entropy_k}," \
-           f"use_bt={args.use_backtracking},bt_coeff={args.backtrack_coeff},max_bt_try={args.max_backtrack_try}"
+exp_name = f"env={args.env}_true_H={args.trajectory_length}_GridSize={env.grid_size}"
 
 out_path = os.path.join(os.path.dirname(__file__), "..", "..", "results/exploration",
                         args.tb_dir_name, exp_name +
@@ -269,7 +181,7 @@ mamepol(
     use_backtracking=args.use_backtracking,
     backtrack_coeff=args.backtrack_coeff,
     max_backtrack_try=args.max_backtrack_try,
-    eps=eps,
+    eps=None,
     learning_rate=args.learning_rate,
     num_traj=args.num_trajectories,
     traj_len=args.trajectory_length,
