@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-from env.rooms import Entity
+from src.envs.rooms import Entity
 import gym
 
 
@@ -21,7 +21,7 @@ class PushBox(object):
     def __init__(self, H=300, grid_size=15, n_actions=4, n_agents=2, checkpoint=False):
         # (x1, y1, x2, y2, door1_opened, door2_opened, door3_opened)
         #TODO CHANGE
-        self.num_features = 1
+        self.num_features = 5
         self.observation_space = gym.spaces.MultiDiscrete([grid_size, grid_size, grid_size, grid_size, grid_size, grid_size])
         # each agent can choose one branch at each timestep
         self.action_space = gym.spaces.MultiDiscrete([n_actions] * n_agents)

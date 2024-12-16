@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.functional as F
+import torch.nn.functional as Functional
+import torch.nn.init as init
 
 from src.utils.dtypes import float_type, int_type, eps
 
@@ -65,6 +67,102 @@ class GaussianPolicy(nn.Module):
         with torch.no_grad():
             s = torch.tensor(s, dtype=float_type).unsqueeze(0)
             return self(s, deterministic=deterministic)[1][0]
+        
+
+class DiscretePolicy(nn.Module):
+    def __init__(self, hidden_sizes, num_features, action_dim, activation=nn.ReLU):
+        """
+        Args:
+            input_dim (int): Dimension of input state
+            hidden_dims (list): List of hidden layer dimensions
+            action_dims (list): List of discrete sizes for each action dimension
+        """
+        super(DiscretePolicy, self).__init__()
+
+        self.activation = activation
+
+        layers = []
+        linear = nn.Linear(num_features, hidden_sizes[0])
+        # Initialize weights with Xavier uniform
+        init.xavier_uniform_(linear.weight)
+        # Initialize biases to zero
+        init.zeros_(linear.bias)
+        layers.extend((linear, self.activation()))
+        for i in range(len(hidden_sizes) - 1):
+            linear = nn.Linear(hidden_sizes[i], hidden_sizes[i+1])
+            # Initialize weights with Xavier uniform
+            init.xavier_uniform_(linear.weight)
+            # Initialize biases to zero
+            init.zeros_(linear.bias)
+            layers.extend((linear, self.activation()))
+            
+        self.network = nn.Sequential(*layers)
+        
+        # Single action head that outputs logits for all dimensions concatenated
+        self.action_head = nn.Linear(hidden_sizes[-1], action_dim)
+        # Initialize final layer to produce near-uniform probabilities
+        init.uniform_(self.action_head.weight, -0.001, 0.001)
+        init.zeros_(self.action_head.bias)
+        self.action_dim = action_dim
+
+        
+    def forward(self, x):
+        """
+        Forward pass to compute action probabilities
+        
+        Args:
+            x (torch.Tensor): Input state tensor
+            
+        Returns:
+            action_probs (torch.Tensor): Action probabilities after softmax
+            action (torch.Tensor): Sampled action based on probabilities
+            log_prob (torch.Tensor): Log probability of sampled action
+        """
+        features = self.network(x)
+        action_logits = self.action_head(features)
+        action_probs = Functional.softmax(action_logits, dim=-1)
+        
+        # Sample action from categorical distribution
+        distribution = torch.distributions.Categorical(action_probs)
+        action = distribution.sample()
+        log_prob = distribution.log_prob(action)
+        
+        return action_probs, action, log_prob
+    
+    def predict(self, state):
+        """
+        Helper method to get just the action for a given state
+        
+        Args:
+            state (torch.Tensor): Input state tensor
+            
+        Returns:
+            action (int): Selected action index
+        """
+        with torch.no_grad():
+            state = torch.tensor(state, dtype=float_type).unsqueeze(0)
+            action_probs, action, _ = self.forward(state)
+            return action
+            
+    def get_log_p(self, states, actions):
+        """
+        Get log probabilities for specific state-action pairs
+        
+        Args:
+            states (torch.Tensor): Batch of input states
+            actions (torch.Tensor): Batch of actions to evaluate
+            
+        Returns:
+            log_probs (torch.Tensor): Log probabilities of the state-action pairs
+        """
+        features = self.network(states)
+        action_logits = self.action_head(features)
+        action_probs = Functional.softmax(action_logits, dim=-1)
+        
+        distribution = torch.distributions.Categorical(action_probs)
+        log_probs = distribution.log_prob(actions)
+        
+        return log_probs
 
 
 def train_supervised(env, policy, train_steps=100, batch_size=5000):
@@ -79,8 +177,8 @@ def train_supervised(env, policy, train_steps=100, batch_size=5000):
         else:
             states = torch.tensor([env.observation_space.sample()[:env.num_features] for _ in range(5000)], dtype=float_type)
 
-        actions = policy(states)[0]
-        loss = torch.mean((actions - torch.zeros_like(actions, dtype=float_type)) ** 2)
+        action_probs, actions, _ = policy.forward(states)
+        loss = torch.mean((action_probs.detach() - (1/policy.action_dim)*torch.ones((5000, policy.action_dim), dtype=float_type)) ** 2)
 
         loss.backward()
         optimizer.step()

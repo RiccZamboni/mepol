@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-from env.rooms import Rooms, Entity, Door
+from src.envs.rooms import Rooms, Entity, Door
 import gym
 TOP = 0
 BOT = 1

@@ -294,7 +294,7 @@ def mepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off_i
         # Seed everything
         np.random.seed(seed)
         torch.manual_seed(seed)
-        env.seed(seed)
+        # env.seed(seed)
 
     # Create a behavioral, a target policy and a tmp policy used to save valid target policies
     # (those with kl <= kl_threshold) during off policy opt
