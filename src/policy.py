@@ -17,6 +17,11 @@ class GaussianPolicy(nn.Module):
 
     def __init__(self, hidden_sizes, num_features, action_dim, log_std_init=-0.5, activation=nn.ReLU):
         super().__init__()
+        self.num_features = num_features
+        if self.num_features == 3:
+            self.policy_decentralized = True
+        else: 
+            self.policy_decentralized = False
 
         self.activation = activation
 
@@ -80,7 +85,11 @@ class DiscretePolicy(nn.Module):
         super(DiscretePolicy, self).__init__()
 
         self.activation = activation
-
+        self.num_features = num_features
+        if self.num_features == 3 or self.num_features == 4:
+            self.policy_decentralized = True
+        else: 
+            self.policy_decentralized = False
         layers = []
         linear = nn.Linear(num_features, hidden_sizes[0])
         # Initialize weights with Xavier uniform
@@ -95,7 +104,7 @@ class DiscretePolicy(nn.Module):
             # Initialize biases to zero
             init.zeros_(linear.bias)
             layers.extend((linear, self.activation()))
-            
+
         self.network = nn.Sequential(*layers)
         
         # Single action head that outputs logits for all dimensions concatenated
@@ -158,7 +167,7 @@ class DiscretePolicy(nn.Module):
         features = self.network(states)
         action_logits = self.action_head(features)
         action_probs = Functional.softmax(action_logits, dim=-1)
-        
+        actions = torch.squeeze(actions)
         distribution = torch.distributions.Categorical(action_probs)
         log_probs = distribution.log_prob(actions)
         
@@ -175,10 +184,10 @@ def train_supervised(env, policy, train_steps=100, batch_size=5000):
         if dict_like_obs:
             states = torch.tensor([env.observation_space.sample()['observation'] for _ in range(5000)], dtype=float_type)
         else:
-            states = torch.tensor([env.observation_space.sample()[:env.num_features] for _ in range(5000)], dtype=float_type)
+            states = torch.tensor([env.observation_space.sample()[:] for _ in range(5000)], dtype=float_type)
 
-        action_probs, actions, _ = policy.forward(states)
-        loss = torch.mean((action_probs.detach() - (1/policy.action_dim)*torch.ones((5000, policy.action_dim), dtype=float_type)) ** 2)
+        actions = policy(states)[0]
+        loss = torch.mean((actions - torch.zeros_like(actions, dtype=float_type)) ** 2)
 
         loss.backward()
         optimizer.step()

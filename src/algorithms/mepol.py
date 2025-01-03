@@ -85,8 +85,8 @@ def collect_particles(env, policy, num_traj, traj_len, state_filter):
 
             actions[trajectory, t] = a
 
-            ns, _, done, _ = env.step(a)
-
+            # ns, _, done, _ = env.step(a)
+            ns, _, done = env.step(a)
             s = ns
 
             if done:
@@ -141,8 +141,7 @@ def compute_importance_weights(behavioral_policy, target_policy, states, actions
 
 def compute_entropy(behavioral_policy, target_policy, states, actions,
                     num_traj, real_traj_lengths, distances, indices, k, G, B, ns, eps):
-    importance_weights = compute_importance_weights(behavioral_policy, target_policy, states, actions,
-                                                    num_traj, real_traj_lengths)
+    importance_weights = compute_importance_weights(behavioral_policy, target_policy, states, actions, num_traj, real_traj_lengths)
     # Compute objective function
     # compute weights sum for each particle
     weights_sum = torch.sum(importance_weights[indices[:, :-1]], dim=1)
@@ -168,14 +167,12 @@ def compute_kl(behavioral_policy, target_policy, states, actions,
     numeric_error = torch.isinf(kl) or torch.isnan(kl)
 
     # Minimum KL is zero
-    # NOTE: do not remove epsilon factor
     kl = torch.max(torch.tensor(0.0), kl)
 
     return kl, numeric_error
 
 
-def collect_particles_and_compute_knn(env, behavioral_policy, num_traj, traj_len,
-                                      state_filter, k, num_workers):
+def collect_particles_and_compute_knn(env, behavioral_policy, num_traj, traj_len, state_filter, k, num_workers):
     assert num_traj % num_workers == 0, "Please provide a number of trajectories " \
                                         "that can be equally split among workers"
 

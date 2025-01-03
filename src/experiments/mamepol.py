@@ -5,7 +5,7 @@ import numpy as np
 
 from datetime import datetime
 from src.envs.mountain_car_wall import MountainCarContinuous
-from src.envs.gridworld_continuous import GridWorldContinuous
+from src.envs.gridworld_continuous_multiagent import GridWorldContinuous
 from src.envs.ant import Ant
 from src.envs.hand_reach import HandReach
 from src.envs.humanoid import Humanoid
@@ -16,7 +16,7 @@ from src.envs.push_box import PushBox
 from src.envs.wrappers import ErgodicEnv
 from src.algorithms.mepol import mepol
 from src.algorithms.mamepol import mamepol
-from src.policy import GaussianPolicy, DiscretePolicy
+from src.policy import GaussianPolicy, DiscretePolicy, train_supervised
 
 
 
@@ -90,40 +90,37 @@ exp_spec = {
     # Multi-Agent Environments
     'Room': {
         'env_create': lambda: Rooms(H=1000, grid_size=10, n_actions=4, n_agents=2),
-        'discretizer_create': lambda env: None,
+        'discretizer_create': lambda env: True,
         'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
-        'state_filter': None
+        'state_filter': None,
+        'eps': None,
+        'heatmap_interp': 'spline16',
+        'heatmap_cmap': 'Blues',
+        'heatmap_labels': ('X', 'Y')
     },
-    'OpenRooms': {
-        'env_create': lambda: OpenRooms(H=1000, grid_size=10, n_actions=4, n_agents=2),
-        'discretizer_create': lambda env: None,
-        'hidden_sizes': [64, 64],
+    'GridWorld': {
+        'env_create': lambda: ErgodicEnv(GridWorldContinuous()),
+        'discretizer_create': lambda env: None, #Discretizer([[-env.dim, env.dim], [-env.dim, env.dim]], [20, 20]),
+        'hidden_sizes': [300, 300],
         'activation': nn.ReLU,
-        'state_filter': None
-    },
-    'ConstRooms': {
-        'env_create': lambda: ConstRooms(H=1000, grid_size=10, n_actions=4, n_agents=2),
-        'discretizer_create': lambda env: None,
-        'hidden_sizes': [64, 64],
-        'activation': nn.ReLU,
-        'state_filter': None
-    },
-    'Secret_Room': {
-        'env_create': lambda: SecretRooms(H=300, grid_size=25, n_actions=4, n_agents=2),
-        'discretizer_create': lambda env: None,
-        'hidden_sizes': [64, 64],
-        'activation': nn.ReLU,
-        'state_filter': None
+        'log_std_init': -1.5,
+        'eps': 1e-15,
+        'heatmap_interp': None,
+        'heatmap_cmap': 'Blues',
+        'heatmap_labels': ('X', '-Y')
     },
     'Push_Box': {
-        'env_create': lambda: PushBox(H=300, grid_size=15, n_actions=4, n_agents=2),
+        'env_create': lambda: PushBox(H=300, grid_size=10, n_actions=4, n_agents=2),
         'discretizer_create': lambda env: None,
         'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
-        'state_filter': None
-    },
-
+        'state_filter': None,
+        'heatmap_interp': 'spline16',
+        'heatmap_cmap': 'Blues',
+        'heatmap_labels': ('X', 'Y'),
+        'eps': None
+    }
 }
 
 spec = exp_spec.get(args.env)
@@ -135,19 +132,49 @@ if spec is None:
 env = spec['env_create']()
 discretizer = spec['discretizer_create'](env)
 state_filter = spec.get('state_filter')
+eps = spec['eps']
 
-def create_policy():
 
-    policy = DiscretePolicy(
-        num_features=env.num_features,
-        hidden_sizes=spec['hidden_sizes'],
-        action_dim=env.action_space.shape[0],
-        activation=spec['activation']
-    )
+def create_policy(update_algo= "Centralized", is_behavioral=False):
+    if env.discrete:
+        if update_algo == "Centralized":
+            policy = DiscretePolicy(
+                num_features=env.num_features,
+                hidden_sizes=spec['hidden_sizes'],
+                action_dim=env.n_actions,
+                activation=spec['activation']
+            )
+        else:
+            policy = DiscretePolicy(
+                num_features=env.num_features_per_agent,
+                hidden_sizes=spec['hidden_sizes'],
+                action_dim=env.n_actions,
+                activation=spec['activation']
+            )
+    else:
+        if update_algo == "Centralized":
+            policy = GaussianPolicy(
+            num_features=env.num_features,
+            hidden_sizes=spec['hidden_sizes'],
+            action_dim=env.n_actions,
+            activation=spec['activation'],
+            log_std_init=spec['log_std_init']
+            )
+        else: 
+            policy = GaussianPolicy(
+            num_features=env.num_features_per_agent,
+            hidden_sizes=spec['hidden_sizes'],
+            action_dim=env.n_actions,
+            activation=spec['activation'],
+            log_std_init=spec['log_std_init']
+            )
+
+        if is_behavioral and args.zero_mean_start:
+            policy = train_supervised(env, policy, train_steps=100, batch_size=5000)
     return policy
 
 
-exp_name = f"env={args.env}_true_H={args.trajectory_length}_GridSize={env.grid_size}"
+exp_name = f"env={args.env}_{args.update_algo}"
 
 out_path = os.path.join(os.path.dirname(__file__), "..", "..", "results/exploration",
                         args.tb_dir_name, exp_name +
@@ -164,7 +191,7 @@ with open(os.path.join(out_path, 'log_info.txt'), 'w') as f:
 
     f.write("-"*10 + "\n")
 
-    tmp_policy = create_policy()
+    tmp_policy = create_policy(args.update_algo)
     f.write(tmp_policy.__str__())
     f.write("\n")
 
@@ -183,7 +210,7 @@ mamepol(
     use_backtracking=args.use_backtracking,
     backtrack_coeff=args.backtrack_coeff,
     max_backtrack_try=args.max_backtrack_try,
-    eps=None,
+    eps=eps,
     learning_rate=args.learning_rate,
     num_traj=args.num_trajectories,
     traj_len=args.trajectory_length,

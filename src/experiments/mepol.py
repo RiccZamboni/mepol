@@ -60,6 +60,8 @@ parser.add_argument('--seed', type=int, default=None,
                     help='The random seed')
 parser.add_argument('--tb_dir_name', type=str, default='mepol',
                     help='The tensorboard directory under which the directory of this experiment is put')
+parser.add_argument('--update_algo', type=str, default='Centralized',
+                    help='The type of algorithmic feedback, either Centralized, Decentralized, Decentralized MI, Decentralized PD')
 
 args = parser.parse_args()
 

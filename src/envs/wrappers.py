@@ -12,7 +12,7 @@ class ErgodicEnv(gym.Wrapper):
     def step(self, a):
         s, r, d, i = super().step(a)
         d = False
-        return s, r, d, i
+        return s, r, d
 
 class CoreStateEnv(gym.Wrapper):
     """

@@ -22,7 +22,16 @@ class Door(Entity):
 class Rooms(gym.Env):
     def __init__(self, H=40, grid_size=10, n_actions=4, n_agents=2, checkpoint=False):
         # (x1, y1, x2, y2, door_opened)
+        self.n_agents = n_agents
         self.num_features = 5
+        self.num_features_per_agent = 3
+        self.n_actions = n_actions
+        self.action_dim = 2
+        self.state_indeces = [[0,1,4], [2,3,4]]
+        self.action_indeces = [[0], [1]]
+        self.distribution_indices = [[0,1,2,3,4], [0,1,4], [2,3,4]]
+        self.discrete = True
+
         self.observation_space = gym.spaces.MultiDiscrete([grid_size, grid_size, grid_size, grid_size, 2])
         self.obs_group_sizes = [2, 2, 1]
         # each agent can choose one branch at each timestep
@@ -143,6 +152,7 @@ class ConstRooms(gym.Env):
     def __init__(self, H=40, grid_size=10, n_actions=4, n_agents=2, checkpoint=False):
         # (x1, y1, x2, y2, door_opened)
         self.num_features = 5
+        self.num_features_per_agent = 3
         self.observation_space = gym.spaces.MultiDiscrete([grid_size, grid_size, grid_size, grid_size, 2])
         self.obs_group_sizes = [2, 2, 1]
         # each agent can choose one branch at each timestep
@@ -256,6 +266,7 @@ class OpenRooms(gym.Env):
     def __init__(self, H=40, grid_size=10, n_actions=4, n_agents=2, checkpoint=False):
         # (x1, y1, x2, y2, door_opened)
         self.num_features = 5
+        self.num_features_per_agent = 3
         self.observation_space = gym.spaces.MultiDiscrete([grid_size, grid_size, grid_size, grid_size, 2])
         self.obs_group_sizes = [2, 2, 1]
         # each agent can choose one branch at each timestep
