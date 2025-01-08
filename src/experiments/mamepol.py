@@ -66,8 +66,10 @@ parser.add_argument('--seed', type=int, default=None,
                     help='The random seed')
 parser.add_argument('--tb_dir_name', type=str, default='mamepol',
                     help='The tensorboard directory under which the directory of this experiment is put')
-parser.add_argument('--update_algo', type=str, default='Centralized',
+parser.add_argument('--update_algo', type=str, required=True,
                     help='The type of algorithmic feedback, either Centralized, Decentralized, Decentralized MI, Decentralized PD')
+parser.add_argument('--policy_decentralized', type=int, required=True,
+                    help='The type of policy, either Centralized, Decentralized')
 
 args = parser.parse_args()
 
@@ -111,8 +113,8 @@ exp_spec = {
         'heatmap_labels': ('X', '-Y')
     },
     'Push_Box': {
-        'env_create': lambda: PushBox(H=300, grid_size=10, n_actions=4, n_agents=2),
-        'discretizer_create': lambda env: None,
+        'env_create': lambda: PushBox(H=300, grid_size=4, n_actions=4, n_agents=2),
+        'discretizer_create': lambda env: True,
         'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
         'state_filter': None,
@@ -135,30 +137,33 @@ state_filter = spec.get('state_filter')
 eps = spec['eps']
 
 
-def create_policy(update_algo= "Centralized", is_behavioral=False):
+def create_policy(policy_decentralized= False, is_behavioral=False, agent_id=0):
     if env.discrete:
-        if update_algo == "Centralized":
+        if not policy_decentralized:
             policy = DiscretePolicy(
                 num_features=env.num_features,
                 hidden_sizes=spec['hidden_sizes'],
                 action_dim=env.n_actions,
-                activation=spec['activation']
+                activation=spec['activation'],
+                decentralized = policy_decentralized
             )
         else:
             policy = DiscretePolicy(
                 num_features=env.num_features_per_agent,
                 hidden_sizes=spec['hidden_sizes'],
                 action_dim=env.n_actions,
-                activation=spec['activation']
+                activation=spec['activation'],
+                decentralized = policy_decentralized
             )
     else:
-        if update_algo == "Centralized":
+        if not policy_decentralized:
             policy = GaussianPolicy(
             num_features=env.num_features,
             hidden_sizes=spec['hidden_sizes'],
             action_dim=env.n_actions,
             activation=spec['activation'],
-            log_std_init=spec['log_std_init']
+            log_std_init=spec['log_std_init'],
+            decentralized = policy_decentralized
             )
         else: 
             policy = GaussianPolicy(
@@ -166,11 +171,12 @@ def create_policy(update_algo= "Centralized", is_behavioral=False):
             hidden_sizes=spec['hidden_sizes'],
             action_dim=env.n_actions,
             activation=spec['activation'],
-            log_std_init=spec['log_std_init']
+            log_std_init=spec['log_std_init'],
+            decentralized = policy_decentralized
             )
 
         if is_behavioral and args.zero_mean_start:
-            policy = train_supervised(env, policy, train_steps=100, batch_size=5000)
+            policy = train_supervised(env, policy, train_steps=100, batch_size=5000, agent_id=agent_id)
     return policy
 
 
@@ -191,7 +197,7 @@ with open(os.path.join(out_path, 'log_info.txt'), 'w') as f:
 
     f.write("-"*10 + "\n")
 
-    tmp_policy = create_policy(args.update_algo)
+    tmp_policy = create_policy(args.update_algo, 0)
     f.write(tmp_policy.__str__())
     f.write("\n")
 

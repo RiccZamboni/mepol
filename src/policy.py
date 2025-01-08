@@ -15,13 +15,10 @@ class GaussianPolicy(nn.Module):
     Gaussian Policy with state-independent diagonal covariance matrix
     """
 
-    def __init__(self, hidden_sizes, num_features, action_dim, log_std_init=-0.5, activation=nn.ReLU):
+    def __init__(self, hidden_sizes, num_features, action_dim, log_std_init=-0.5, activation=nn.ReLU, decentralized= False):
         super().__init__()
         self.num_features = num_features
-        if self.num_features == 3:
-            self.policy_decentralized = True
-        else: 
-            self.policy_decentralized = False
+        self.policy_decentralized = decentralized
 
         self.activation = activation
 
@@ -75,7 +72,7 @@ class GaussianPolicy(nn.Module):
         
 
 class DiscretePolicy(nn.Module):
-    def __init__(self, hidden_sizes, num_features, action_dim, activation=nn.ReLU):
+    def __init__(self, hidden_sizes, num_features, action_dim, activation=nn.ReLU, decentralized = False):
         """
         Args:
             input_dim (int): Dimension of input state
@@ -86,10 +83,7 @@ class DiscretePolicy(nn.Module):
 
         self.activation = activation
         self.num_features = num_features
-        if self.num_features == 3 or self.num_features == 4:
-            self.policy_decentralized = True
-        else: 
-            self.policy_decentralized = False
+        self.policy_decentralized = decentralized
         layers = []
         linear = nn.Linear(num_features, hidden_sizes[0])
         # Initialize weights with Xavier uniform
@@ -174,7 +168,7 @@ class DiscretePolicy(nn.Module):
         return log_probs
 
 
-def train_supervised(env, policy, train_steps=100, batch_size=5000):
+def train_supervised(env, policy, train_steps=100, batch_size=5000, agent_id=0):
     optimizer = torch.optim.Adam(policy.parameters(), lr=0.00025)
     dict_like_obs = True if type(env.observation_space.sample()) is OrderedDict else False
 
@@ -184,7 +178,7 @@ def train_supervised(env, policy, train_steps=100, batch_size=5000):
         if dict_like_obs:
             states = torch.tensor([env.observation_space.sample()['observation'] for _ in range(5000)], dtype=float_type)
         else:
-            states = torch.tensor([env.observation_space.sample()[:] for _ in range(5000)], dtype=float_type)
+            states = torch.tensor([env.observation_space.sample()[env.state_indeces[agent_id]] for _ in range(5000)], dtype=float_type)
 
         actions = policy(states)[0]
         loss = torch.mean((actions - torch.zeros_like(actions, dtype=float_type)) ** 2)

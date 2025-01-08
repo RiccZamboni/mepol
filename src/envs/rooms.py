@@ -29,7 +29,7 @@ class Rooms(gym.Env):
         self.action_dim = 2
         self.state_indeces = [[0,1,4], [2,3,4]]
         self.action_indeces = [[0], [1]]
-        self.distribution_indices = [[0,1,2,3,4], [0,1,4], [2,3,4]]
+        self.distribution_indices = [[0,1,2,3], [0,1], [2,3]]
         self.discrete = True
 
         self.observation_space = gym.spaces.MultiDiscrete([grid_size, grid_size, grid_size, grid_size, 2])

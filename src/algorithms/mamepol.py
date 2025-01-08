@@ -17,7 +17,7 @@ from torch.utils import tensorboard
 from src.utils.dtypes import float_type, int_type
 from src.utils.convert2base import obs_to_int_pi, s_to_sp, convert_to_base
 
-# TODO ADD CONTINUOUS CASES
+
 def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, interp, labels):
     """
     Builds a log-probability state visitation heatmap by running
@@ -29,7 +29,14 @@ def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, in
     e_full, e_a1, e_a2 = - torch.sum(d_full*torch.log(d_full)), - torch.sum(d_a1*torch.log(d_a1)), - torch.sum(d_a2*torch.log(d_a2))
     plt.close()
     image_fig, axes = plt.subplots(1, 2, figsize=(10, 5)) 
+    if d_a2.ndim == 4:
+        axes_dim = tuple(range(2, d_a1.ndim))
+    else: 
+        axes_dim = 2
+    # Perform the sum
+    # d_a1_marg, d_a2_marg = torch.sum(d_a1, dim=axes_dim), torch.sum(d_a2, dim=axes_dim)
     log_p_1, log_p_2 = np.ma.log(d_a1), np.ma.log(d_a2)
+    
     log_p_1_ravel, log_p_2_ravel = log_p_1.ravel(), log_p_2.ravel()
     axes[0].imshow(log_p_1.filled(np.min(log_p_1_ravel)), interpolation=interp, cmap=cmap)
     axes[0].set_title("Agent 1")
@@ -44,6 +51,16 @@ def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, in
     axes[1].set_yticks([])
     axes[1].set_xlabel(labels[0])
     axes[1].set_ylabel(labels[1])
+    if d_a2.ndim == 4:
+        axes_dim = tuple(range(0, d_a1.ndim-2))
+        d_p_marg = torch.sum(d_a1, dim=axes_dim)
+        log_p_c = np.ma.log(d_p_marg)
+        axes[2].imshow(log_p_c.filled(np.min(log_p_c)), interpolation=interp, cmap=cmap)
+        axes[2].set_title("Box")
+        axes[2].set_xticks([])
+        axes[2].set_yticks([])
+        axes[2].set_xlabel(labels[0])
+        axes[2].set_ylabel(labels[1])
     plt.tight_layout()
 
     return None, [e_full.item(), e_a1.item(), e_a2.item()], image_fig
@@ -200,10 +217,10 @@ def compute_importance_weights_knn(env, behavioral_policies, target_policies, st
 
 # TODO FIX FOR CONTINUOUS
 def compute_full_distributions(env, states, num_traj, real_traj_lengths):
-    dim_states = tuple(env.observation_space.nvec[:-1])
     a12_ind = env.distribution_indices[0]
     a1_ind = env.distribution_indices[1]
     a2_ind = env.distribution_indices[2]
+    dim_states = tuple(env.observation_space.nvec[a12_ind])
     dim_states_a1 = tuple(env.observation_space.nvec[a1_ind])
     dim_states_a2 = tuple(env.observation_space.nvec[a2_ind])
     states_counter = torch.zeros((num_traj,) + dim_states,  dtype=float_type)
@@ -260,15 +277,24 @@ def compute_distributions(env, states, num_traj, real_traj_lengths):
 
 
 def compute_entropy(env, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths):
-    importance_weights, importance_weights_norm, importance_weights_norm_a1, importance_weights_norm_a2  = compute_importance_weights(env, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths)
+    _, importance_weights_norm, importance_weights_norm_a1, importance_weights_norm_a2  = compute_importance_weights(env, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths)
     # compute importance-weighted entropy
     distributions_per_traj, distributions_per_traj_a1, distributions_per_traj_a2 = compute_distributions(env, states, num_traj, real_traj_lengths)
+    distribution_mix = (distributions_per_traj_a1 + distributions_per_traj_a2) / 2
+    entropy_mix_norm = - torch.sum(importance_weights_norm * torch.sum(distribution_mix*torch.log(distribution_mix), dim=tuple(range(1, len(distribution_mix.shape)))), dim=0)
     entropy_norm = - torch.sum(importance_weights_norm * torch.sum(distributions_per_traj*torch.log(distributions_per_traj), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
     # SINGLE AGENT IMPORTANCE SAMPLING
     entropy_a1_norm = - torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj_a1*torch.log(distributions_per_traj_a1), dim=tuple(range(1, len(distributions_per_traj_a1.shape)))), dim=0)
     entropy_a2_norm = - torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj_a2*torch.log(distributions_per_traj_a2), dim=tuple(range(1, len(distributions_per_traj_a2.shape)))), dim=0)
-
-    return entropy_norm, entropy_a1_norm, entropy_a2_norm
+    distributions_per_traj_a1_exp = distributions_per_traj_a1.unsqueeze(3).unsqueeze(4)
+    distributions_per_traj_a2_exp = distributions_per_traj_a2.unsqueeze(1).unsqueeze(1)
+    mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
+    # mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj_a1*(torch.log(distributions_per_traj_a1) -torch.log(distributions_per_traj_a2)), dim=(1,2)), dim=0)/2
+    mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
+    entropy_a1_mix = entropy_a1_norm + mi_a12
+    # mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj_a2*(torch.log(distributions_per_traj_a2) -torch.log(distributions_per_traj_a1)), dim=(1,2)), dim=0)/2
+    entropy_a2_mix = entropy_a2_norm + mi_a21
+    return entropy_mix_norm, entropy_a1_norm, entropy_a2_norm, entropy_a1_mix, entropy_a2_mix
 
 
 def compute_entropy_knn(env, behavioral_policies, target_policies, states, actions,
@@ -304,8 +330,11 @@ def compute_mutual_information(env, behavioral_policies, target_policies, states
     distributions_per_traj, distributions_per_traj_a1, distributions_per_traj_a2 = compute_distributions(env, states, num_traj, real_traj_lengths)
     distributions_per_traj_a1_exp = distributions_per_traj_a1.unsqueeze(3).unsqueeze(4)
     distributions_per_traj_a2_exp = distributions_per_traj_a2.unsqueeze(1).unsqueeze(1)
-    mi = torch.sum(importance_weights_norm * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=(1,2,3,4,5,6)), dim=0)
-    return mi.detach().clone(), mi.detach().clone()
+    # mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
+    mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj_a1*(torch.log(distributions_per_traj_a1) -torch.log(distributions_per_traj_a2)), dim=(1,2)), dim=0)/2
+    # mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
+    mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj_a2*(torch.log(distributions_per_traj_a2) -torch.log(distributions_per_traj_a1)), dim=(1,2)), dim=0)/2
+    return mi_a12, mi_a21
 
 
 def compute_kl(env, behavioral_policies, target_policies, states):
@@ -426,7 +455,7 @@ def log_off_iter_statistics(writer, csv_file_3, epoch, global_off_iter,
 
 def policy_update(env, thresholds, optimizers, behavioral_policies, target_policies, states, actions, num_traj, traj_len, update_algo):
     # Maximize entropy
-    entropy, entropy_a1, entropy_a2 = compute_entropy(env, behavioral_policies, target_policies, states, actions, num_traj, traj_len)
+    entropy, entropy_a1, entropy_a2, entropy_a1_mix, entropy_a2_mix = compute_entropy(env, behavioral_policies, target_policies, states, actions, num_traj, traj_len)
     mi_a12, mi_a21 = compute_mutual_information(env, behavioral_policies, target_policies, states, actions, num_traj, traj_len)
     if update_algo == "Centralized":
         losses = - entropy
@@ -451,7 +480,8 @@ def policy_update(env, thresholds, optimizers, behavioral_policies, target_polic
                     print(f"Error optimizing at index {idx}: {e}")
                     raise
     elif update_algo == "Decentralized_MI":
-        losses = [- entropy_a1 + mi_a12 , - entropy_a2 + mi_a21]
+        # losses = [- entropy_a1 + mi_a12 , - entropy_a2 + mi_a21]
+        losses = [- entropy_a1_mix , - entropy_a2_mix]
         numeric_error = torch.isinf(losses[0]) or torch.isinf(losses[1]) or torch.isnan(losses[0]) or torch.isnan(losses[1]) 
         conditions = [not v for v in thresholds if not v]
         last_opt_idx = max((i for i, c in enumerate(conditions) if c), default=-1)
@@ -533,9 +563,9 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
     target_policies = []
     last_valid_target_policies = []
     for agent in range(env.n_agents):
-        behavioral_policies.extend([create_policy(update_algo, is_behavioral=True)])
-        target_policies.extend([create_policy(update_algo)])
-        last_valid_target_policies.extend([create_policy(update_algo)])
+        behavioral_policies.extend([create_policy(update_algo, is_behavioral=True, agent_id=agent)])
+        target_policies.extend([create_policy(update_algo, agent_id=agent)])
+        last_valid_target_policies.extend([create_policy(update_algo, agent_id=agent)])
         target_policies[agent].load_state_dict(behavioral_policies[agent].state_dict())
         last_valid_target_policies[agent].load_state_dict(behavioral_policies[agent].state_dict())
 
@@ -584,7 +614,7 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
         states, actions, real_traj_lengths, next_states, _, _ = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None, None)
 
         with torch.no_grad():
-            entropy, entropy_a1, entropy_a2 = compute_entropy(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths)
+            entropy, entropy_a1, entropy_a2, _, _ = compute_entropy(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths)
             mi_a12, mi_a21 = compute_mutual_information(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths)
     else:
         # Continuous Entropy
@@ -592,7 +622,7 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
             collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers,  state_filter, k)
 
         with torch.no_grad():
-            entropy, entropy_a1, entropy_a2 = compute_entropy_knn(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths, distances, indices, k, G, B, ns, eps)
+            entropy, entropy_a1, entropy_a2, _, _ = compute_entropy_knn(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths, distances, indices, k, G, B, ns, eps)
             mi_a12, mi_a21 = 0, 0
 
 
@@ -730,10 +760,10 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
                 # Compute entropy of new policy
                 with torch.no_grad():
                     if env.discrete:
-                        entropy, entropy_a1, entropy_a2 = compute_entropy(env, last_valid_target_policies, last_valid_target_policies, states, actions, num_traj, real_traj_lengths)
+                        entropy, entropy_a1, entropy_a2, _, _ = compute_entropy(env, last_valid_target_policies, last_valid_target_policies, states, actions, num_traj, real_traj_lengths)
                         mi_a12, mi_a21 = compute_mutual_information(env, last_valid_target_policies, last_valid_target_policies, states, actions, num_traj, real_traj_lengths)
                     else:
-                        entropy, entropy_a1, entropy_a2  = compute_entropy_knn(env, last_valid_target_policies, last_valid_target_policies,states, actions, num_traj, real_traj_lengths, distances, indices, k, G, B, ns, eps)
+                        entropy, entropy_a1, entropy_a2, _, _  = compute_entropy_knn(env, last_valid_target_policies, last_valid_target_policies,states, actions, num_traj, real_traj_lengths, distances, indices, k, G, B, ns, eps)
                         mi_a12, mi_a21 = 0, 0
 
                 if torch.isnan(entropy) or torch.isinf(entropy):
