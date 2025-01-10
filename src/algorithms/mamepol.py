@@ -26,7 +26,8 @@ def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, in
     states, _,real_traj_lengths,_ = collect_particles(env, policies, num_traj, traj_len)
     states = torch.tensor(states, dtype=float_type)
     d_full, d_a1, d_a2 = compute_full_distributions(env, states, num_traj, real_traj_lengths)
-    e_full, e_a1, e_a2 = - torch.sum(d_full*torch.log(d_full)), - torch.sum(d_a1*torch.log(d_a1)), - torch.sum(d_a2*torch.log(d_a2))
+    d_mix = d_a1 + d_a2 / 2
+    e_full, e_mix, e_a1, e_a2 = - torch.sum(d_full*torch.log(d_full)), -torch.sum(d_mix*torch.log(d_mix)), - torch.sum(d_a1*torch.log(d_a1)), - torch.sum(d_a2*torch.log(d_a2))
     plt.close()
     image_fig, axes = plt.subplots(1, 2, figsize=(10, 5)) 
     if d_a2.ndim == 4:
@@ -63,7 +64,7 @@ def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, in
         axes[2].set_ylabel(labels[1])
     plt.tight_layout()
 
-    return None, [e_full.item(), e_a1.item(), e_a2.item()], image_fig
+    return None, [e_full.item(), e_mix.item(), e_a1.item(), e_a2.item()], image_fig
 
 
 def collect_particles_parallel(env, policies, num_traj, traj_len, num_workers, state_filter, k):
@@ -276,7 +277,7 @@ def compute_distributions(env, states, num_traj, real_traj_lengths):
     return states_counter, states_counter_a1, states_counter_a2
 
 
-def compute_entropy(env, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths):
+def compute_entropy(env, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths, beta):
     _, importance_weights_norm, importance_weights_norm_a1, importance_weights_norm_a2  = compute_importance_weights(env, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths)
     # compute importance-weighted entropy
     distributions_per_traj, distributions_per_traj_a1, distributions_per_traj_a2 = compute_distributions(env, states, num_traj, real_traj_lengths)
@@ -291,10 +292,10 @@ def compute_entropy(env, behavioral_policies, target_policies, states, actions, 
     mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
     # mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj_a1*(torch.log(distributions_per_traj_a1) -torch.log(distributions_per_traj_a2)), dim=(1,2)), dim=0)/2
     mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
-    entropy_a1_mix = entropy_a1_norm + mi_a12
+    entropy_a1_mix = entropy_a1_norm - beta*mi_a12
     # mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj_a2*(torch.log(distributions_per_traj_a2) -torch.log(distributions_per_traj_a1)), dim=(1,2)), dim=0)/2
-    entropy_a2_mix = entropy_a2_norm + mi_a21
-    return entropy_mix_norm, entropy_a1_norm, entropy_a2_norm, entropy_a1_mix, entropy_a2_mix
+    entropy_a2_mix = entropy_a2_norm - beta*mi_a21
+    return entropy_norm, entropy_mix_norm, entropy_a1_norm, entropy_a2_norm, entropy_a1_mix, entropy_a2_mix
 
 
 def compute_entropy_knn(env, behavioral_policies, target_policies, states, actions,
@@ -330,10 +331,10 @@ def compute_mutual_information(env, behavioral_policies, target_policies, states
     distributions_per_traj, distributions_per_traj_a1, distributions_per_traj_a2 = compute_distributions(env, states, num_traj, real_traj_lengths)
     distributions_per_traj_a1_exp = distributions_per_traj_a1.unsqueeze(3).unsqueeze(4)
     distributions_per_traj_a2_exp = distributions_per_traj_a2.unsqueeze(1).unsqueeze(1)
-    # mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
-    mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj_a1*(torch.log(distributions_per_traj_a1) -torch.log(distributions_per_traj_a2)), dim=(1,2)), dim=0)/2
-    # mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
-    mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj_a2*(torch.log(distributions_per_traj_a2) -torch.log(distributions_per_traj_a1)), dim=(1,2)), dim=0)/2
+    mi_a12 = torch.sum(importance_weights_norm * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
+    # mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj_a1*(torch.log(distributions_per_traj_a1) -torch.log(distributions_per_traj_a2)), dim=(1,2)), dim=0)/2
+    mi_a21 = torch.sum(importance_weights_norm * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
+    # mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj_a2*(torch.log(distributions_per_traj_a2) -torch.log(distributions_per_traj_a1)), dim=(1,2)), dim=0)/2
     return mi_a12, mi_a21
 
 
@@ -385,11 +386,12 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
     # Log to Tensorboard
     writer.add_scalar("Loss A1", loss[0], global_step=epoch)
     writer.add_scalar("Loss A2", loss[1], global_step=epoch)
-    writer.add_scalar("Entropy", entropy[0], global_step=epoch)
-    writer.add_scalar("Entropy A1", entropy[1], global_step=epoch)
-    writer.add_scalar("Entropy A2", entropy[2], global_step=epoch)
-    writer.add_scalar("MI A12", entropy[3], global_step=epoch)
-    writer.add_scalar("MI A21", entropy[4], global_step=epoch)
+    writer.add_scalar("Joint Entropy", entropy[0], global_step=epoch)
+    writer.add_scalar("Mixture Entropy", entropy[1], global_step=epoch)
+    writer.add_scalar("Entropy A1", entropy[2], global_step=epoch)
+    writer.add_scalar("Entropy A2", entropy[3], global_step=epoch)
+    writer.add_scalar("MI A12", entropy[4], global_step=epoch)
+    writer.add_scalar("MI A21", entropy[5], global_step=epoch)
     writer.add_scalar("Execution time", execution_time, global_step=epoch)
     writer.add_scalar("Number off-policy iteration", num_off_iters, global_step=epoch)
     if full_entropy is not None:
@@ -397,9 +399,10 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
 
     if heatmap_image is not None:
         writer.add_figure(f"Heatmap", heatmap_image, global_step=epoch)
-        writer.add_scalar("Exact Entropy", heatmap_entropy[0], global_step=epoch)
-        writer.add_scalar("Exact Entropy A1", heatmap_entropy[1], global_step=epoch)
-        writer.add_scalar("Exact Entropy A2", heatmap_entropy[2], global_step=epoch)
+        writer.add_scalar("Exact Joint Entropy", heatmap_entropy[0], global_step=epoch)
+        writer.add_scalar("Exact Mixture Entropy", heatmap_entropy[1], global_step=epoch)
+        writer.add_scalar("Exact Entropy A1", heatmap_entropy[2], global_step=epoch)
+        writer.add_scalar("Exact Entropy A2", heatmap_entropy[3], global_step=epoch)
 
     # Prepare tabulate table
     table = []
@@ -407,10 +410,10 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
     table.extend([
         ["Epoch", epoch],
         ["Execution time (s)", fancy_float(execution_time)],
-        ["Entropy", fancy_float(entropy[0])],
-        ["Entropy A1", fancy_float(entropy[1])],
-        ["Entropy A2", fancy_float(entropy[2])],
-        ["Off-policy iters", num_off_iters]
+        ["Joint Entropy", fancy_float(entropy[0])],
+        ["Mixture Entropy", fancy_float(entropy[1])],
+        ["Entropy A1", fancy_float(entropy[2])],
+        ["Entropy A2", fancy_float(entropy[3])]
     ])
 
     if backtrack_iters is not None:
@@ -421,7 +424,7 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
     fancy_grid = tabulate(table, headers="firstrow", tablefmt="fancy_grid", numalign='right')
 
     # Log to csv file 1
-    csv_file_1.write(f"{epoch}, {loss[0]}, {loss[1]}, {entropy[0]}, {entropy[1]}, {entropy[2]}, {entropy[3]},  {entropy[4]}, {full_entropy}, {num_off_iters}, {execution_time}\n")
+    csv_file_1.write(f"{epoch}, {loss[0]}, {loss[1]}, {entropy[0]}, {entropy[1]}, {entropy[2]}, {entropy[3]},  {entropy[4]}, {entropy[5]}, {full_entropy}, {num_off_iters}, {execution_time}\n")
     csv_file_1.flush()
 
     # Log to csv file 2
@@ -429,9 +432,10 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
         csv_file_2.write(f"{epoch},{heatmap_entropy[0]}, {heatmap_entropy[1]}, {heatmap_entropy[2]}\n")
         csv_file_2.flush()
         table.extend([
-            ["Exact Entropy", fancy_float(heatmap_entropy[0])],
-            ["Exact Entropy A1", fancy_float(heatmap_entropy[1])],
-            ["Exact Entropy A2", fancy_float(heatmap_entropy[2])]
+            ["Exact Joint Entropy", fancy_float(heatmap_entropy[0])],
+            ["Exact Mixture Entropy", fancy_float(heatmap_entropy[1])],
+            ["Exact Entropy A1", fancy_float(heatmap_entropy[2])],
+            ["Exact Entropy A2", fancy_float(heatmap_entropy[3])]
         ])
 
     # Log to stdout and log file
@@ -453,12 +457,19 @@ def log_off_iter_statistics(writer, csv_file_3, epoch, global_off_iter,
     writer.add_scalar("Off policy iter KL Agent 2", kls[1], global_step=global_off_iter)
 
 
-def policy_update(env, thresholds, optimizers, behavioral_policies, target_policies, states, actions, num_traj, traj_len, update_algo):
+def policy_update(env, thresholds, optimizers, behavioral_policies, target_policies, states, actions, num_traj, traj_len, update_algo, beta):
     # Maximize entropy
-    entropy, entropy_a1, entropy_a2, entropy_a1_mix, entropy_a2_mix = compute_entropy(env, behavioral_policies, target_policies, states, actions, num_traj, traj_len)
-    mi_a12, mi_a21 = compute_mutual_information(env, behavioral_policies, target_policies, states, actions, num_traj, traj_len)
+    entropy, entropy_mix, entropy_a1, entropy_a2, entropy_a1_mi, entropy_a2_mi = compute_entropy(env, behavioral_policies, target_policies, states, actions, num_traj, traj_len, beta=beta)
     if update_algo == "Centralized":
         losses = - entropy
+        numeric_error = torch.isinf(losses) or torch.isnan(losses)
+        for id in [i for i, v in enumerate(thresholds) if not v]:
+            optimizers[id].zero_grad()
+        losses.backward()
+        for id in [i for i, v in enumerate(thresholds) if not v]:
+            optimizers[id].step()
+    elif update_algo == "Centralized_MI":
+        losses = - entropy_mix
         numeric_error = torch.isinf(losses) or torch.isnan(losses)
         for id in [i for i, v in enumerate(thresholds) if not v]:
             optimizers[id].zero_grad()
@@ -481,7 +492,7 @@ def policy_update(env, thresholds, optimizers, behavioral_policies, target_polic
                     raise
     elif update_algo == "Decentralized_MI":
         # losses = [- entropy_a1 + mi_a12 , - entropy_a2 + mi_a21]
-        losses = [- entropy_a1_mix , - entropy_a2_mix]
+        losses = [- entropy_a1_mi , - entropy_a2_mi]
         numeric_error = torch.isinf(losses[0]) or torch.isinf(losses[1]) or torch.isnan(losses[0]) or torch.isnan(losses[1]) 
         conditions = [not v for v in thresholds if not v]
         last_opt_idx = max((i for i, c in enumerate(conditions) if c), default=-1)
@@ -548,7 +559,7 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
           full_entropy_traj_scale, full_entropy_k,
           heatmap_every, heatmap_discretizer, heatmap_episodes, heatmap_num_steps,
           heatmap_cmap, heatmap_labels, heatmap_interp,
-          seed, out_path, num_workers, update_algo):
+          seed, out_path, num_workers, update_algo, beta):
 
     # Seed everything
     if seed is not None:
@@ -585,12 +596,12 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
     # Create log files
     log_file = open(os.path.join((out_path), 'log_file.txt'), 'a', encoding="utf-8")
     csv_file_1 = open(os.path.join(out_path, f"{env_name}.csv"), 'w')
-    csv_file_1.write(",".join(['epoch', 'loss A1', 'loss A2', 'entropy', 'entropy A1', 'entropy A2',  'MI A12', 'MI A21', 'full_entropy', 'num_off_iters','execution_time']))
+    csv_file_1.write(",".join(['epoch', 'loss A1', 'loss A2', 'joint entropy','mixture entropy', 'entropy A1', 'entropy A2', 'MI A12', 'MI A21', 'full_entropy', 'num_off_iters','execution_time']))
     csv_file_1.write("\n")
 
     if heatmap_discretizer is not None:
         csv_file_2 = open(os.path.join(out_path, f"{env_name}-heatmap.csv"), 'w')
-        csv_file_2.write(",".join(['epoch', 'exact_entropy', 'exact_entropy_a1', 'exact_entropy_a2']))
+        csv_file_2.write(",".join(['epoch', 'exact_entropy','exact_mixture_entropy', 'exact_entropy_a1', 'exact_entropy_a2']))
         csv_file_2.write("\n")
     else:
         csv_file_2 = None
@@ -614,7 +625,7 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
         states, actions, real_traj_lengths, next_states, _, _ = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None, None)
 
         with torch.no_grad():
-            entropy, entropy_a1, entropy_a2, _, _ = compute_entropy(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths)
+            entropy, entropy_mix, entropy_a1, entropy_a2, entropy_a1_mix, entropy_a2_mix = compute_entropy(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths, beta)
             mi_a12, mi_a21 = compute_mutual_information(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths)
     else:
         # Continuous Entropy
@@ -631,10 +642,12 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
 
     if update_algo == "Centralized":
         loss = [- entropy, -entropy]
+    elif update_algo == "Centralized_MI":
+        loss = [- entropy_mix, -entropy_mix]
     elif update_algo == "Decentralized":
         loss = [- entropy_a1.numpy(), -entropy_a2.numpy()]
     elif update_algo == "Decentralized_MI":
-        loss = [- entropy_a1.numpy() + mi_a12.numpy(), -entropy_a2.numpy() + mi_a21.numpy()]
+        loss = [- entropy_a1_mix.numpy(), -entropy_a2_mix.numpy()]
     else:
         raise NotImplementedError
 
@@ -654,7 +667,7 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
             writer=writer, log_file=log_file, csv_file_1=csv_file_1, csv_file_2=csv_file_2,
             epoch=epoch,
             loss=loss,
-            entropy=[entropy, entropy_a1, entropy_a2, mi_a12, mi_a21],
+            entropy=[entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21],
             execution_time=execution_time,
             num_off_iters=0,
             full_entropy=None,
@@ -700,12 +713,12 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
         while not all(kl_threshold_reacheds):
             if env.discrete:
                 # Optimize policy
-                loss, numeric_error = policy_update(env, kl_threshold_reacheds, optimizers, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths, update_algo)
+                loss, numeric_error = policy_update(env, kl_threshold_reacheds, optimizers, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths, update_algo, beta=beta)
             else:
                 # Optimize policy
                 loss, numeric_error = policy_update_knn(env, kl_threshold_reacheds, optimizers, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths, update_algo, distances, indices, k, G, B, ns, eps)
 
-            if update_algo == "Centralized":
+            if update_algo == "Centralized" or update_algo == "Centralized_MI":
                 entropy= [- loss.detach().numpy(), -loss.detach().numpy()]
             else:
                 entropy= [- loss[0].detach().numpy(), -loss[1].detach().numpy()]
@@ -760,7 +773,7 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
                 # Compute entropy of new policy
                 with torch.no_grad():
                     if env.discrete:
-                        entropy, entropy_a1, entropy_a2, _, _ = compute_entropy(env, last_valid_target_policies, last_valid_target_policies, states, actions, num_traj, real_traj_lengths)
+                        entropy, entropy_mix, entropy_a1, entropy_a2, entropy_a1_mix, entropy_a2_mix = compute_entropy(env, last_valid_target_policies, last_valid_target_policies, states, actions, num_traj, real_traj_lengths, beta)
                         mi_a12, mi_a21 = compute_mutual_information(env, last_valid_target_policies, last_valid_target_policies, states, actions, num_traj, real_traj_lengths)
                     else:
                         entropy, entropy_a1, entropy_a2, _, _  = compute_entropy_knn(env, last_valid_target_policies, last_valid_target_policies,states, actions, num_traj, real_traj_lengths, distances, indices, k, G, B, ns, eps)
@@ -780,10 +793,12 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
 
                     if update_algo == "Centralized":
                         loss = [- entropy.numpy(), -entropy.numpy()]
+                    elif update_algo == "Centralized_MI":
+                        loss = [- entropy_mix.numpy(), -entropy_mix.numpy()]
                     elif update_algo == "Decentralized":
                         loss = [- entropy_a1.numpy(), -entropy_a2.numpy()]
                     elif update_algo == "Decentralized_MI":
-                        loss = [- entropy_a1.numpy() + mi_a12.numpy(), -entropy_a2.numpy() + mi_a21.numpy()]
+                        loss = [- entropy_a1_mix.numpy(), -entropy_a2_mix.numpy()]
                     else:
                         raise NotImplementedError
                     execution_time = time.time() - t0
@@ -810,7 +825,7 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
                         writer=writer, log_file=log_file, csv_file_1=csv_file_1, csv_file_2=csv_file_2,
                         epoch=epoch,
                         loss=loss,
-                        entropy=[entropy, entropy_a1, entropy_a2, mi_a12, mi_a21],
+                        entropy=[entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21],
                         execution_time=execution_time,
                         num_off_iters=num_off_iters,
                         full_entropy=None,
