@@ -185,7 +185,8 @@ def create_policy(policy_decentralized= False, is_behavioral=False, agent_id=0):
 exp_name = f"env={args.env}_{args.update_algo}"
 
 out_path = os.path.join(os.path.dirname(__file__), "..", "..", "results/exploration",
-                        args.tb_dir_name, exp_name +
+                        args.tb_dir_name, exp_name + "__" + args.num_trajectories + 
+                        "__" + args.trajectory_length +
                         "__" + datetime.now().strftime('%Y_%m_%d_%H_%M_%S') +
                         "__" + str(os.getpid()))
 os.makedirs(out_path, exist_ok=True)
