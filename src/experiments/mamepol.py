@@ -70,7 +70,7 @@ parser.add_argument('--update_algo', type=str, required=True,
                     help='The type of algorithmic feedback, either Centralized, Decentralized, Decentralized MI, Centralized MI')
 parser.add_argument('--policy_decentralized', type=int, required=True,
                     help='The type of policy, either Centralized, Decentralized')
-parser.add_argument('--beta_mi', type=float, required=True,
+parser.add_argument('--beta', type=float, required=True,
                     help='The degree of regularization')
 
 args = parser.parse_args()
@@ -237,5 +237,5 @@ mamepol(
     out_path=out_path,
     num_workers=args.num_workers,
     update_algo= args.update_algo,
-    beta = args.beta_mi
+    beta = args.beta
 )
