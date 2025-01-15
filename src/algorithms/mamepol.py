@@ -486,7 +486,7 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
 
     # Heatmap
     if heatmap_discretizer is not None:
-        _, heatmap_entropies, heatmap_image = get_heatmap(env, behavioral_policies, heatmap_discretizer, num_traj, traj_len, heatmap_cmap, heatmap_interp, heatmap_labels)
+        _, heatmap_entropies, heatmap_image = get_heatmap(env, behavioral_policies, heatmap_discretizer, heatmap_episodes, heatmap_num_steps, heatmap_cmap, heatmap_interp, heatmap_labels)
     else:
         heatmap_entropies = None
         heatmap_image = None
@@ -623,7 +623,7 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
                         # Heatmap
                         if heatmap_discretizer is not None:
                             _, heatmap_entropies, heatmap_image = \
-                                get_heatmap(env, behavioral_policies, heatmap_discretizer, num_traj, traj_len, heatmap_cmap, heatmap_interp, heatmap_labels)
+                                get_heatmap(env, behavioral_policies, heatmap_discretizer, heatmap_episodes, heatmap_num_steps, heatmap_cmap, heatmap_interp, heatmap_labels)
                         else:
                             heatmap_entropies = None
                             heatmap_image = None
