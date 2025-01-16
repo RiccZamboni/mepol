@@ -29,14 +29,17 @@ def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, in
     d_mix = (d_a1 + d_a2)/2
     e_full, e_mix, e_a1, e_a2 = - torch.sum(d_full*torch.log(d_full)), -torch.sum(d_mix*torch.log(d_mix)), - torch.sum(d_a1*torch.log(d_a1)), - torch.sum(d_a2*torch.log(d_a2))
     plt.close()
-    image_fig, axes = plt.subplots(1, 2, figsize=(10, 5)) 
+    
     if d_a2.ndim == 4:
-        axes_dim = tuple(range(2, d_a1.ndim))
+        image_fig, axes = plt.subplots(1, 3, figsize=(10, 5)) 
+        axes_dim = tuple(range(2, d_a2.ndim))
+        # Perform the sum
+        d_a1_marg, d_a2_marg = torch.sum(d_a1, dim=axes_dim), torch.sum(d_a2, dim=axes_dim)
+        log_p_1, log_p_2 = np.ma.log(d_a1_marg), np.ma.log(d_a2_marg)
     else: 
+        image_fig, axes = plt.subplots(1, 2, figsize=(10, 5)) 
         axes_dim = 2
-    # Perform the sum
-    # d_a1_marg, d_a2_marg = torch.sum(d_a1, dim=axes_dim), torch.sum(d_a2, dim=axes_dim)
-    log_p_1, log_p_2 = np.ma.log(d_a1), np.ma.log(d_a2)
+        log_p_1, log_p_2 = np.ma.log(d_a1), np.ma.log(d_a2)
     
     log_p_1_ravel, log_p_2_ravel = log_p_1.ravel(), log_p_2.ravel()
     axes[0].imshow(log_p_1.filled(np.min(log_p_1_ravel)), interpolation=interp, cmap=cmap)
@@ -235,9 +238,9 @@ def compute_entropy(env, behavioral_policies, target_policies, states, actions, 
     distributions_per_traj_a1_exp = distributions_per_traj_a1.unsqueeze(3).unsqueeze(4)
     distributions_per_traj_a2_exp = distributions_per_traj_a2.unsqueeze(1).unsqueeze(1)
     mi_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
-    kl_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj_a1*(torch.log(distributions_per_traj_a1) -torch.log(distributions_per_traj_a2)), dim=(1,2)), dim=0).mean()
+    kl_a12 = torch.sum(importance_weights_norm_a1 * torch.sum(distributions_per_traj_a1*(torch.log(distributions_per_traj_a1) -torch.log(distributions_per_traj_a2)), dim=tuple(range(1, len(distributions_per_traj_a1.shape)))), dim=0).mean()
     mi_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj*(torch.log(distributions_per_traj) - torch.log(distributions_per_traj_a1_exp) - torch.log(distributions_per_traj_a2_exp)), dim=tuple(range(1, len(distributions_per_traj.shape)))), dim=0)
-    kl_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj_a2*(torch.log(distributions_per_traj_a2) -torch.log(distributions_per_traj_a1)), dim=(1,2)), dim=0).mean()
+    kl_a21 = torch.sum(importance_weights_norm_a2 * torch.sum(distributions_per_traj_a2*(torch.log(distributions_per_traj_a2) -torch.log(distributions_per_traj_a1)), dim=tuple(range(1, len(distributions_per_traj_a1.shape)))), dim=0).mean()
     return entropy_norm, entropy_mix_norm, entropy_a1_norm, entropy_a2_norm, mi_a12, mi_a21, kl_a12, kl_a21
 
 def compute_loss(env, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths, algo_update, beta):

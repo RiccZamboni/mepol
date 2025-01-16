@@ -116,7 +116,7 @@ exp_spec = {
         'heatmap_labels': ('X', '-Y')
     },
     'Push_Box': {
-        'env_create': lambda: PushBox(H=300, grid_size=4, n_actions=4, n_agents=2),
+        'env_create': lambda: PushBox(H=300, grid_size=10, n_actions=4, n_agents=2),
         'discretizer_create': lambda env: True,
         'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
