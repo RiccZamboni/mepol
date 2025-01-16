@@ -393,13 +393,36 @@ def policy_update(env, thresholds, optimizers, behavioral_policies, target_polic
     return losses, numeric_error
 
 
-def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off_iters,
-          use_backtracking, backtrack_coeff, max_backtrack_try, eps,
-          learning_rate, num_traj, traj_len, num_epochs, optimizer,
-          full_entropy_traj_scale, full_entropy_k,
-          heatmap_every, heatmap_discretizer, heatmap_episodes, heatmap_num_steps,
-          heatmap_cmap, heatmap_labels, heatmap_interp,
-          seed, out_path, num_workers, update_algo, beta):
+def mamepol(env, 
+            env_name, 
+            state_filter, 
+            create_policy, 
+            k, 
+            kl_threshold, 
+            max_off_iters,
+            use_backtracking, 
+            backtrack_coeff, 
+            max_backtrack_try, 
+            eps,
+            learning_rate, 
+            num_traj, 
+            traj_len, 
+            num_epochs, 
+            optimizer,
+            full_entropy_traj_scale, 
+            full_entropy_k,
+            heatmap_every, 
+            heatmap_discretizer, 
+            heatmap_episodes,
+            heatmap_num_steps,
+            heatmap_cmap, 
+            heatmap_labels, 
+            heatmap_interp,
+            seed, 
+            out_path, 
+            num_workers, 
+            update_algo, 
+            beta):
 
     # Seed everything
     if seed is not None:
@@ -449,12 +472,6 @@ def mamepol(env, env_name, state_filter, create_policy, k, kl_threshold, max_off
     csv_file_3 = open(os.path.join(out_path, f"{env_name}_off_policy_iter.csv"), "w")
     csv_file_3.write(",".join(['epoch', 'off_policy_iter', 'Entropy A1', 'Entropy A2', 'kl A1', 'kl A2', 'learning_rate']))
     csv_file_3.write("\n")
-
-    # Fixed constants
-    ns = len(state_filter) if (state_filter is not None) else env.num_features
-    B = np.log(k) - scipy.special.digamma(k)
-    full_B = np.log(full_entropy_k) - scipy.special.digamma(full_entropy_k)
-    G = scipy.special.gamma(ns/2 + 1)
 
     # At epoch 0 do not optimize, just log stuff for the initial policy
     epoch = 0
