@@ -5,17 +5,10 @@ import os
 import numpy as np
 
 from datetime import datetime
-from src.envs.mountain_car_wall import MountainCarContinuous
 from src.envs.gridworld_continuous_multiagent import GridWorldContinuous
-from src.envs.ant import Ant
-from src.envs.hand_reach import HandReach
-from src.envs.humanoid import Humanoid
-from src.envs.discretizer import Discretizer
-from src.envs.rooms import Rooms, OpenRooms, ConstRooms
-from src.envs.secret_rooms import SecretRooms
+from src.envs.rooms import Rooms
 from src.envs.push_box import PushBox
 from src.envs.wrappers import ErgodicEnv
-from src.algorithms.mepol import mepol
 from src.algorithms.mamepol import mamepol
 from src.policy import GaussianPolicy, DiscretePolicy, train_supervised
 

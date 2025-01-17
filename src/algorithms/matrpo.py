@@ -83,93 +83,54 @@ def conj_gradient(Ax, b, iters):
 
     return x
 
-def collect_sample_batch(env, policy, batch_size, traj_len, num_workers=1):
-    def _collect_sample_batch(env, policy, batch_size,
+def collect_sample_batch(env, policies, batch_size, traj_len, num_workers=1):
+
+    def _collect_sample_batch(env, policies, batch_size,
                               traj_len, parallel=False):
-        steps = 0
-        obs_shape = env.num_features
-
-        total_states = None
-        total_actions = None
-        total_rewards = None
-        total_real_traj_lens = None
-        dones = None
-
-        while steps < batch_size:
-
-            if parallel:
-                env.seed(np.random.randint(2**16))
-
-            states = np.zeros(
-                (1, traj_len + 1, obs_shape), dtype=np.float32
-            )
-            if type(env.action_space) == gym.spaces.Discrete:
-                act_shape = 1
-                actions = np.zeros((1, traj_len, act_shape), dtype=np.int32)
-            else:
-                act_shape = env.action_space.shape[0]
-                actions = np.zeros(
-                    (1, traj_len, act_shape), dtype=np.float32
-                )
-            rewards = np.zeros((1, traj_len), dtype=np.float32)
-            real_traj_lens = np.zeros((1, 1), dtype=np.int32)
-            dones = np.zeros((1, 1), dtype=np.bool)
-
+        n_states = len(env.reset())
+        action_dim = env.action_dim
+        states = np.zeros((batch_size, traj_len + 1, n_states), dtype=np.float32)
+        actions = np.zeros((batch_size, traj_len, action_dim), dtype=np.float32)
+        rewards = np.zeros((batch_size, traj_len,), dtype=np.float32)
+        dones = np.zeros((batch_size, 1), dtype=np.bool_)
+        real_traj_lengths = np.zeros((batch_size, 1), dtype=np.int32)
+        for trajectory in range(batch_size):
             s = env.reset()
-
             for t in range(traj_len):
+                states[trajectory, t] = s
+                a = []
+                for id, policy in enumerate(policies):
+                    if action_dim > 1:
+                        a = a + policy.predict(s).tolist() if not policy.policy_decentralized else a + policy.predict(s[env.state_indeces[id]]).tolist()
+                    else:
+                        a = a + [policy.predict(s).item()] if not policy.policy_decentralized else a + [policy.predict(s[env.state_indeces[id]]).item()]
+                actions[trajectory, t] = a
+                ns, r, done = env.step(a)
+                rewards[trajectory, t] = r
 
-                states[0, t] = s
-
-                a = policy.predict(s).numpy()
-
-                actions[0, t] = a
-
-                ns, r, done, _ = env.step(a)
-
-                rewards[0, t] = r
                 s = ns
-
-                steps += 1
-
-                if done is True or steps == batch_size:
+                if done:
                     break
 
-            real_traj_lens[0, 0] = t+1
-            dones[0, 0] = done
-            states[0, t+1] = s
+            states[trajectory, t+1] = ns
+            real_traj_lengths[trajectory] = t+1
+            dones[trajectory] = done
 
-            if total_states is None:
-                total_states = states
-                total_actions = actions
-                total_rewards = rewards
-                total_real_traj_lens = real_traj_lens
-                total_dones = dones
-            else:
-                total_states = np.vstack([total_states, states])
-                total_actions = np.vstack([total_actions, actions])
-                total_rewards = np.vstack([total_rewards, rewards])
-                total_real_traj_lens = np.vstack([total_real_traj_lens,
-                                                  real_traj_lens])
-                total_dones = np.vstack([total_dones, dones])
+        return states, actions, rewards, real_traj_lengths, dones
 
-        return (total_states, total_actions, total_rewards,
-                total_real_traj_lens, total_dones)
+    assert batch_size % num_workers == 0, \
+        "Please provide a batch size" \
+        "that is a multiple of the worker size"
 
-    if num_workers == 1:
-        return _collect_sample_batch(env, policy, batch_size, traj_len)
-    else:
-        assert batch_size % num_workers == 0, \
-            "Please provide a batch size" \
-            "that is a multiple of the worker size"
+    batch_per_worker = int(batch_size / num_workers)
+    results = Parallel(n_jobs=num_workers)(
+        delayed(_collect_sample_batch)(
+            env, policies, batch_per_worker, traj_len, parallel=True
+        ) for _ in range(num_workers)
+    )
+    states, actions, rewards, real_traj_lengths, dones = [np.vstack(x) for x in zip(*results)]
 
-        batch_per_worker = int(batch_size / num_workers)
-        results = Parallel(n_jobs=num_workers)(
-            delayed(_collect_sample_batch)(
-                env, policy, batch_per_worker, traj_len, parallel=True
-            ) for i in range(num_workers)
-        )
-        return [np.vstack(x) for x in zip(*results)]
+    return  states, actions, rewards, real_traj_lengths, dones
 
 
 def process_traj(gamma, lambd, vfuncs, states, actions, rewards, boot_value):
@@ -201,7 +162,7 @@ def process_traj(gamma, lambd, vfuncs, states, actions, rewards, boot_value):
     return targets, advantages
 
 
-def trpo(
+def matrpo(
     env,
     env_name,
     num_epochs,
@@ -209,8 +170,8 @@ def trpo(
     traj_len,
     gamma=0.995,
     lambd=0.98,
-    vfunc=None,
-    policy=None,
+    vfuncs=None,
+    policies=None,
     optimizer='lbfgs',
     critic_lr=1e-2,
     critic_reg=1e-3,
@@ -232,14 +193,14 @@ def trpo(
         # env.reset(seed)
 
     # Set value function optimizer
+    vfunc_optimizers = []
     if optimizer == 'adam':
-        vfunc_optimizer = torch.optim.Adam(vfunc.parameters(), lr=critic_lr)
+        for id, vfunc in enumerate(vfuncs):
+            vfunc_optimizers.extend([torch.optim.Adam(vfunc.parameters(), lr=critic_lr)])
     elif optimizer == 'lbfgs':
-        vfunc_optimizer = torch.optim.LBFGS(
-            vfunc.parameters(),
-            lr=critic_lr,
-            max_iter=25
-        )
+        for id, vfunc in enumerate(vfuncs):
+            vfunc_optimizers.extend([torch.optim.LBFGS(vfunc.parameters(),lr=critic_lr,max_iter=25
+            )])
     else:
         raise NotImplementedError()
 
@@ -249,8 +210,7 @@ def trpo(
     # Create log files
     log_file = open(os.path.join((out_path), 'log_file.txt'), 'a', encoding="utf-8")
     csv_file_1 = open(os.path.join(out_path, f"{env_name}.csv"), 'w')
-    csv_file_1.write(",".join(['Epoch', 'NumSamples', 'ExecutionTime', 'AverageReturn',
-                               'BacktrackSuccess','BacktrackIters']))
+    csv_file_1.write(",".join(['Epoch', 'NumSamples', 'ExecutionTime', 'AverageReturn', 'BacktrackSuccess','BacktrackIters']))
     csv_file_1.write("\n")
     csv_file_1.flush()
 
@@ -262,191 +222,175 @@ def trpo(
 
         # Collect trajectories
         states, actions, rewards, real_traj_lens, dones = collect_sample_batch(
-            env, policy, batch_size, traj_len, num_workers
+            env, policies, batch_size, traj_len, num_workers
         )
+
         num_traj = states.shape[0]
 
         total_reward = 0
 
-        # Process each trajectory to get the targets and advantages
-        # needed for the update
-        for traj in range(num_traj):
-            real_traj_len = real_traj_lens[traj, 0]
+        for agent in range(env.n_agents):
+            vfunc = vfuncs[agent]
+            vfunc_optimizer = vfunc_optimizers[agent]
+            policy = policies[agent]
+            # Process each trajectory to get the targets and advantages
+            # needed for the update for each agent
+            for traj in range(num_traj):
+                real_traj_len = real_traj_lens[traj, 0]
+                traj_states = states[traj, :real_traj_len, env.state_indeces[agent]].T
+                traj_actions = actions[traj, :real_traj_len, env.action_indeces[agent]].T
+                traj_rewards = rewards[traj, :real_traj_len]
+                traj_vfuncs = vfunc(torch.from_numpy(traj_states).type(float_type))
+                traj_done = dones[traj, 0]
 
-            traj_states = states[traj, :real_traj_len]
-            traj_actions = actions[traj, :real_traj_len]
-            traj_rewards = rewards[traj, :real_traj_len]
-            traj_vfuncs = vfunc(torch.from_numpy(traj_states).type(float_type))
-            traj_done = dones[traj, 0]
-
-            # Last state value is null because of termination
-            # or bootstrapped because of maximum taken steps
-            boot_value = (
-                vfunc(torch.from_numpy(states[traj, -1, :]).type(float_type))
-                if not traj_done
-                else 0
-            )
-
-            # Get the targets and the advantages for each trajectory
-            traj_targets, traj_advantages = process_traj(
-                gamma, lambd,
-                traj_vfuncs,
-                traj_states,
-                traj_actions,
-                traj_rewards,
-                boot_value
-            )
-
-            # Incrementally build tensors for this epoch
-            if traj == 0:
-                epoch_states = traj_states
-                epoch_actions = traj_actions
-                epoch_targets = traj_targets
-                epoch_advantages = traj_advantages
-            else:
-                epoch_states = np.concatenate(
-                    [epoch_states, traj_states], axis=0
+                # Last state value is null because of termination
+                # or bootstrapped because of maximum taken steps
+                boot_value = (
+                    vfunc(torch.from_numpy(states[traj, -1, env.state_indeces[agent]]).type(float_type))
+                    if not traj_done
+                    else 0
                 )
-                epoch_actions = np.concatenate(
-                    [epoch_actions, traj_actions], axis=0
-                )
-                epoch_targets = np.concatenate(
-                    [epoch_targets, traj_targets], axis=0
-                )
-                epoch_advantages = np.concatenate(
-                    [epoch_advantages, traj_advantages], axis=0
+                # Get the targets and the advantages for each trajectory and agent
+                traj_targets, traj_advantages = process_traj(
+                    gamma, 
+                    lambd,
+                    traj_vfuncs,
+                    traj_states,
+                    traj_actions,
+                    traj_rewards,
+                    boot_value
                 )
 
-            total_reward += np.sum(traj_rewards)
+                # Incrementally build tensors for this epoch
+                if traj == 0:
+                    epoch_states = traj_states
+                    epoch_actions = traj_actions
+                    epoch_targets = traj_targets
+                    epoch_advantages = traj_advantages
+                else:
+                    epoch_states = np.concatenate(
+                        [epoch_states, traj_states], axis=0
+                    )
+                    epoch_actions = np.concatenate(
+                        [epoch_actions, traj_actions], axis=0
+                    )
+                    epoch_targets = np.concatenate(
+                        [epoch_targets, traj_targets], axis=0
+                    )
+                    epoch_advantages = np.concatenate(
+                        [epoch_advantages, traj_advantages], axis=0
+                    )
 
-        # Normalize advantages
-        epoch_advantages = (epoch_advantages - epoch_advantages.mean()) / epoch_advantages.std()
+                total_reward += np.sum(traj_rewards)
 
-        # Create torch tensors for downstream computation
-        epoch_states = torch.from_numpy(epoch_states).type(float_type)
-        epoch_actions = torch.from_numpy(epoch_actions).type(float_type)
-        if env_action_type == 'discrete':
+            # Normalize advantages
+            epoch_advantages = (epoch_advantages - epoch_advantages.mean()) / epoch_advantages.std()
+
+            # Create torch tensors for downstream computation
+            epoch_states = torch.from_numpy(epoch_states).type(float_type)
+            epoch_actions = torch.from_numpy(epoch_actions).type(float_type)
             epoch_actions = epoch_actions.long()
-        else:
-            epoch_actions = epoch_actions.type(float_type)
-        epoch_advantages = torch.from_numpy(epoch_advantages).type(float_type)
-        epoch_targets = torch.from_numpy(epoch_targets).unsqueeze(1).type(float_type)
+            epoch_advantages = torch.from_numpy(epoch_advantages).type(float_type)
+            epoch_targets = torch.from_numpy(epoch_targets).unsqueeze(1).type(float_type)
+            
 
-        # TRPO optimization
+            # MA-TRPO optimization
+            old_log_prob = policy.get_log_p(epoch_states, epoch_actions).detach()
 
-        # Fixed log probs
-        old_log_prob = policy.get_log_p(
-            epoch_states, epoch_actions
-        ).detach()
-
-        def compute_gain():
-            """
-            Computes the gain of the new policy w.r.t the old one
-            """
-            new_log_prob = policy.get_log_p(
-                epoch_states, epoch_actions
-            )
-            gain = torch.mean(
-                torch.exp(new_log_prob - old_log_prob) * (epoch_advantages)
-            )
-            return gain
-
-        if env_action_type == 'discrete':
-            p0 = policy(epoch_states).detach()
-        else:
-            mu0, _ = policy(epoch_states)
-            mu0 = mu0.detach()
-            log_std0 = policy.log_std.detach()
-
-        def compute_kl():
-            """
-            Computes KL(policy_old||policy_new)
-            or according to the following notation KL(0||1)
-            """
-            if env_action_type == 'discrete':
-                p1 = policy(epoch_states)
-                return (p0*torch.log(p0/p1)).sum(dim=1).mean()
-            else:
-                mu1, _ = policy(epoch_states)
-                log_std1 = policy.log_std
-
-                var0 = torch.exp(log_std0)**2
-                var1 = torch.exp(log_std1)**2
-                return (
-                    (0.5 * ((var0 + (mu1-mu0)**2) / (var1 + 1e-7) - 1)
-                     + log_std1 - log_std0)
-                ).sum(dim=1).mean()
-
-        def hessian_vector_product(x):
-            """
-            Computes the product between the Hessian of the KL
-            wrt the policy parameters and the tensor provided as input x
-            """
-            kl = compute_kl()
-            grads = torch.autograd.grad(
-                kl, policy.parameters(), create_graph=True
-            )
-            grads = torch.cat(
-                [torch.reshape(grad, (-1,)) for grad in grads], dim=0
-            )
-            sum_kl_x = torch.sum(grads * x, dim=0)
-            grads_2 = torch.autograd.grad(sum_kl_x, policy.parameters())
-            grads_2 = torch.cat(
-                [torch.reshape(grad, (-1,)) for grad in grads_2], dim=0
-            )
-            grads_2 += cg_damping * x
-            return grads_2
-
-        gain = compute_gain()
-        g = torch.autograd.grad(gain, policy.parameters())
-        g = torch.cat([torch.reshape(x, (-1,)) for x in g], dim=0)
-
-        x = conj_gradient(hessian_vector_product, g, iters=cg_iters)
-
-        # 1/lagrange_multiplier is the maximum step we can take
-        # along the gradient direction
-        lagrange_mult = torch.sqrt(
-            torch.dot(x, hessian_vector_product(x)) / (2*kl_thresh)
-        )
-
-        # Backtracking to ensure improvement and *exact* KL constraint
-        # after the update
-        success, params, backtrack_iters = backtracking(
-            policy, compute_gain, compute_kl, kl_thresh, x, 1/lagrange_mult
-        )
-
-        # Update the value critic
-        if optimizer == 'lbfgs':
-            def compute_vfunc_loss():
-                vfunc_optimizer.zero_grad()
-                state_values = vfunc(epoch_states)
-                params = torch.cat(
-                    [torch.reshape(w, (-1,)) for w in vfunc.parameters()],
-                    dim=0
+            def compute_gain():
+                """
+                Computes the gain of the new policy w.r.t the old one
+                """
+                new_log_prob = policy.get_log_p(
+                    epoch_states, epoch_actions
                 )
-                l2 = torch.sum(params**2, dim=0)
-                loss = (torch.mean((state_values - epoch_targets)**2)
-                        + critic_reg*l2)
-                loss.backward()
-                return loss
-            loss = vfunc_optimizer.step(compute_vfunc_loss)
-        else:
-            dataset = torch.utils.data.TensorDataset(epoch_states,
-                                                     epoch_targets)
-            dloader = torch.utils.data.DataLoader(
-                dataset,
-                batch_size=critic_batch_size,
-                shuffle=True,
-                drop_last=True
+                gain = torch.mean(
+                    torch.exp(new_log_prob - old_log_prob) * (epoch_advantages)
+                )
+                return gain
+
+            p0, _, _  = policy.forward(epoch_states)
+            
+
+            def compute_kl():
+                """
+                Computes KL(policy_old||policy_new)
+                or according to the following notation KL(0||1)
+                """
+                p1, _, _ = policy.forward(epoch_states)
+                return (p0*torch.log(p0/p1)).sum(dim=1).mean()
+                
+
+            def hessian_vector_product(x):
+                """
+                Computes the product between the Hessian of the KL
+                wrt the policy parameters and the tensor provided as input x
+                """
+                kl = compute_kl()
+                grads = torch.autograd.grad(
+                    kl, policy.parameters(), create_graph=True
+                )
+                grads = torch.cat(
+                    [torch.reshape(grad, (-1,)) for grad in grads], dim=0
+                )
+                sum_kl_x = torch.sum(grads * x, dim=0)
+                grads_2 = torch.autograd.grad(sum_kl_x, policy.parameters())
+                grads_2 = torch.cat(
+                    [torch.reshape(grad, (-1,)) for grad in grads_2], dim=0
+                )
+                grads_2 += cg_damping * x
+                return grads_2
+
+            gain = compute_gain()
+            g = torch.autograd.grad(gain, policy.parameters())
+            g = torch.cat([torch.reshape(x, (-1,)) for x in g], dim=0)
+
+            x = conj_gradient(hessian_vector_product, g, iters=cg_iters)
+
+            # 1/lagrange_multiplier is the maximum step we can take
+            # along the gradient direction
+            lagrange_mult = torch.sqrt(
+                torch.dot(x, hessian_vector_product(x)) / (2*kl_thresh)
             )
 
-            for _ in range(critic_iters):
-                vfunc_optimizer.zero_grad()
-                for mb_states, mb_targets in dloader:
+            # Backtracking to ensure improvement and *exact* KL constraint
+            # after the update
+            success, params, backtrack_iters = backtracking(
+                policy, compute_gain, compute_kl, kl_thresh, x, 1/lagrange_mult
+            )
+
+            # Update the value critic
+            if optimizer == 'lbfgs':
+                def compute_vfunc_loss():
                     vfunc_optimizer.zero_grad()
-                    loss = torch.mean((vfunc(mb_states) - mb_targets)**2)
+                    state_values = vfunc(epoch_states)
+                    params = torch.cat(
+                        [torch.reshape(w, (-1,)) for w in vfunc.parameters()],
+                        dim=0
+                    )
+                    l2 = torch.sum(params**2, dim=0)
+                    loss = (torch.mean((state_values - epoch_targets)**2)
+                            + critic_reg*l2)
                     loss.backward()
-                    vfunc_optimizer.step()
+                    return loss
+                loss = vfunc_optimizer.step(compute_vfunc_loss)
+            else:
+                dataset = torch.utils.data.TensorDataset(epoch_states,
+                                                        epoch_targets)
+                dloader = torch.utils.data.DataLoader(
+                    dataset,
+                    batch_size=critic_batch_size,
+                    shuffle=True,
+                    drop_last=True
+                )
+
+                for _ in range(critic_iters):
+                    vfunc_optimizer.zero_grad()
+                    for mb_states, mb_targets in dloader:
+                        vfunc_optimizer.zero_grad()
+                        loss = torch.mean((vfunc(mb_states) - mb_targets)**2)
+                        loss.backward()
+                        vfunc_optimizer.step()
 
         num_samples += epoch_states.shape[0]
         execution_time = time.time() - t0

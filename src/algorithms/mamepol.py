@@ -70,7 +70,7 @@ def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, in
     return None, [e_full.item(), e_mix.item(), e_a1.item(), e_a2.item()], image_fig
 
 
-def collect_particles_parallel(env, policies, num_traj, traj_len, num_workers, state_filter, k):
+def collect_particles_parallel(env, policies, num_traj, traj_len, num_workers, state_filter):
     assert num_traj % num_workers == 0, "Please provide a number of trajectories " \
                                         "that can be equally split among workers"
     # Collect particles using behavioral policy
@@ -142,7 +142,6 @@ def compute_importance_weights(env, behavioral_policies, target_policies, states
         traj_behavior_log_p = []
         for id, target_policy in enumerate(target_policies):
             traj_target_log_p = traj_target_log_p + [target_policy.get_log_p(traj_states, traj_actions[:, env.action_indeces[id]])] if not target_policy.policy_decentralized else traj_target_log_p + [target_policy.get_log_p(traj_states[:, env.state_indeces[id]], traj_actions[:, env.action_indeces[id]])]
-            assert True
         for id, behavioral_policy in enumerate(behavioral_policies):
             traj_behavior_log_p = traj_behavior_log_p + [behavioral_policy.get_log_p(traj_states, traj_actions[:, env.action_indeces[id]])] if not behavioral_policy.policy_decentralized else traj_behavior_log_p + [behavioral_policy.get_log_p(traj_states[:,env.state_indeces[id]], traj_actions[:, env.action_indeces[id]])]
         traj_particle_iw = torch.exp(torch.sum(traj_target_log_p[0] + traj_target_log_p[1] - traj_behavior_log_p[0] - traj_behavior_log_p[1], dim=0))
@@ -288,7 +287,7 @@ def compute_kl(env, behavioral_policies, target_policies, states):
     for idx, (behavioral_policy, target_policy) in enumerate(zip(behavioral_policies, target_policies)):
         p0, _, _ = behavioral_policy.forward(states) if not behavioral_policy.policy_decentralized else behavioral_policy.forward(states[:,:,env.state_indeces[idx]])
         p1, _, _ = target_policy.forward(states) if not target_policy.policy_decentralized else target_policy.forward(states[:,:,env.state_indeces[idx]])
-        kl = torch.sum(p0*(torch.log(p0) -torch.log(p1)), dim=(0,1)).mean()
+        kl = torch.sum(p0*(torch.log(p0)-torch.log(p1)), dim=(0,1)).mean()
         kls.append(kl)
         numeric_error = torch.isinf(kl) or torch.isnan(kl) or numeric_error
     # Minimum KL is zero
@@ -478,7 +477,7 @@ def mamepol(env,
     t0 = time.time()
 
     # Discrete Entropy 
-    states, actions, real_traj_lengths, next_states = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None, None)
+    states, actions, real_traj_lengths, next_states = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None)
 
     with torch.no_grad():
         entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21 = compute_entropy(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths, beta)
@@ -547,7 +546,7 @@ def mamepol(env,
         num_off_iters = 0
 
         # Collect particles to optimize off policy
-        states, actions, real_traj_lengths, next_states = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None, None)
+        states, actions, real_traj_lengths, next_states = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None)
 
         if use_backtracking:
             learning_rate = original_lr

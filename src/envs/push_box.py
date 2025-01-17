@@ -32,7 +32,7 @@ class PushBox(object):
         self.observation_space = gym.spaces.MultiDiscrete([grid_size, grid_size, grid_size, grid_size, grid_size, grid_size])
         # each agent can choose one branch at each timestep
         self.action_space = gym.spaces.MultiDiscrete([n_actions] * n_agents)
-        self.init_agents = [Entity(1 + grid_size // 2, 1 + grid_size // 2), Entity(2 + grid_size // 2, 2 + grid_size // 2)]
+        self.init_agents = [Entity(4 + grid_size // 2, 4 + grid_size // 2), Entity(2 + grid_size // 2, 2 + grid_size // 2)]
         self.init_box = Box(grid_size // 2, grid_size // 2)
         self.wall_map = np.zeros((grid_size, grid_size))
         self.n_agents = n_agents

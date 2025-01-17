@@ -39,6 +39,7 @@ class Rooms(gym.Env):
         self.init_agents = [Entity(1 + grid_size // 10, 1 + grid_size // 10), Entity(grid_size // 10, grid_size // 10)]
         self.init_door = Door(grid_size // 2, grid_size // 2)
         self.switches = [Entity(grid_size // 10, int(grid_size * 0.8)), Entity(int(grid_size * 0.8), grid_size // 10)]
+        self.goals = [Entity(int(grid_size * 0.8), int(grid_size * 0.8))]
         # self.switches = [Entity(grid_size // 10, int(grid_size * 0.8))]
         self.n_agents = n_agents
         self.grid_size = grid_size
@@ -56,7 +57,7 @@ class Rooms(gym.Env):
         self.ckpts = {'left_switch': [[False, bin] for bin in self.ckpt_bins['left_switch']],
                       'door': [[False, bin] for bin in self.ckpt_bins['door']],
                       'right_switch': [[False, bin] for bin in self.ckpt_bins['right_switch']]}
-        self.success_rew = 3 if self.checkpoint else 1
+        self.success_rew = 100 # if self.checkpoint else 1
 
     def reset(self, seed = None):
         self.agents = copy.deepcopy(self.init_agents)
@@ -112,13 +113,12 @@ class Rooms(gym.Env):
         return np.sqrt((e1.x - e2.x) ** 2 + (e1.y - e2.y) ** 2)
 
     def _reward(self):
+        goal_radius = self.grid_size // 10
         rew = 0
-        if self.checkpoint:
-            rew += self._checkpoint_rew()
-        for agent in self.agents:
-            if agent.x < (self.grid_size / 2 + 1):
-                return rew
-        rew += self.success_rew
+        for goal in self.goals:
+            for agent in self.agents:
+                if self._dist(agent, goal) <= 1.5 * goal_radius:
+                    rew += self.success_rew
         return rew
 
     def _checkpoint_rew(self):
