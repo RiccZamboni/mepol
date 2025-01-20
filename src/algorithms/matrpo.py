@@ -309,7 +309,8 @@ def matrpo(
                 )
                 return gain
 
-            p0, _, _  = policy.forward(epoch_states)
+            p0_a, _, _  = policy.forward(epoch_states)
+            p0 = p0_a.detach()
             
 
             def compute_kl():
@@ -375,8 +376,7 @@ def matrpo(
                     return loss
                 loss = vfunc_optimizer.step(compute_vfunc_loss)
             else:
-                dataset = torch.utils.data.TensorDataset(epoch_states,
-                                                        epoch_targets)
+                dataset = torch.utils.data.TensorDataset(epoch_states, epoch_targets)
                 dloader = torch.utils.data.DataLoader(
                     dataset,
                     batch_size=critic_batch_size,

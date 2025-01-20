@@ -126,7 +126,8 @@ for agent in range(env.n_agents):
     if args.policy_init is not None:
         kind = 'MAMEPOLInit'
         policy = create_policy()
-        policy_path = args.policy_init + str(agent)
+        policy_path = "/Users/riccardozamboni/Documents/PhD/Git/mepol/pretrained/" + args.policy_init + "-" + str(agent)
+        current_directory = os.path.dirname(os.path.abspath(__file__))
         policy.load_state_dict(torch.load(policy_path))
         policies.extend([policy])
     else:
