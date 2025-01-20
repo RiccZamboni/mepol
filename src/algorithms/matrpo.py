@@ -309,7 +309,7 @@ def matrpo(
                 )
                 return gain
 
-            p0_a, _, _  = policy.forward(epoch_states)
+            p0_a, _, _ = policy.forward(epoch_states)
             p0 = p0_a.detach()
             
 
@@ -391,6 +391,7 @@ def matrpo(
                         loss = torch.mean((vfunc(mb_states) - mb_targets)**2)
                         loss.backward()
                         vfunc_optimizer.step()
+                
 
         num_samples += epoch_states.shape[0]
         execution_time = time.time() - t0

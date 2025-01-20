@@ -17,7 +17,7 @@ parser.add_argument('--num_workers', type=int, default=1,
 parser.add_argument('--env', type=str, required=True,
                     help='The MDP')
 parser.add_argument('--policy_init', type=str, default=None,
-                    help='Path to the weights for custom policy initialization.')
+                    help='Path to the weights for custom policy initialization. Like room/Centralized/T50_1/')
 parser.add_argument('--num_epochs', type=int, required=True,
                     help='The number of training epochs')
 parser.add_argument('--batch_size', type=int, required=True,
@@ -124,9 +124,9 @@ for agent in range(env.n_agents):
 policies = []
 for agent in range(env.n_agents):
     if args.policy_init is not None:
-        kind = 'MAMEPOLInit'
+        kind = args.policy_init.replace("/", "__")
         policy = create_policy()
-        policy_path = "/Users/riccardozamboni/Documents/PhD/Git/mepol/pretrained/" + args.policy_init + "-" + str(agent)
+        policy_path = "/Users/riccardozamboni/Documents/PhD/Git/mepol/pretrained/" + args.policy_init + "policy-" + str(agent)
         current_directory = os.path.dirname(os.path.abspath(__file__))
         policy.load_state_dict(torch.load(policy_path))
         policies.extend([policy])
@@ -136,10 +136,10 @@ for agent in range(env.n_agents):
         policies.extend([policy])
 
 
-exp_name = f"env={args.env}_{kind}"
+exp_name = f"env={args.env}__{kind}"
 
 out_path = os.path.join(os.path.dirname(__file__), "..", "..", "results/goal_rl",
-                        args.tb_dir_name, exp_name +
+                        args.tb_dir_name, exp_name + "__" + f"{args.batch_size}" + "__" + f"{args.traj_len}" + 
                         "__" + datetime.now().strftime('%Y_%m_%d_%H_%M_%S') +
                         "__" + str(os.getpid()))
 os.makedirs(out_path, exist_ok=True)

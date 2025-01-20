@@ -129,6 +129,7 @@ class DiscretePolicy(nn.Module):
         distribution = torch.distributions.Categorical(action_probs)
         action = distribution.sample()
         log_prob = distribution.log_prob(action)
+        entropy = distribution.entropy()
         
         return action_probs, action, log_prob
     

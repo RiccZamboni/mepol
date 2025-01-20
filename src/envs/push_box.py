@@ -13,7 +13,7 @@ RIGHT = 3
 class Box(Entity):
     def __init__(self, x, y):
         super(Box, self).__init__(x, y)
-        self.radius = 2
+        self.radius = 1
         self.force = np.zeros(4)
 
 
