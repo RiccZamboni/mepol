@@ -16,10 +16,10 @@ class Discretizer:
 
     def discretize(self, features):
         if self.lambda_transform is None:
-            return tuple(np.digitize(x=features[i], bins=self.bins[i]) for i in range(len(features)))
+            return np.array([np.digitize(x=features[i], bins=self.bins[i]) for i in range(len(features))])
         else:
             # features = self.lambda_transform(features)
-            return tuple(np.digitize(x=features[i], bins=self.bins[i]) for i in range(len(features)))
+            return np.array([np.digitize(x=features[i], bins=self.bins[i]) for i in range(len(features))])
 
 
     def get_empty_mat(self):
