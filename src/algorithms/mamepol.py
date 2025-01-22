@@ -273,12 +273,19 @@ def compute_kl(env, behavioral_policies, target_policies, states):
     policy_entropies = []
     # Compute KL divergence between behavioral and target policy
     for idx, (behavioral_policy, target_policy) in enumerate(zip(behavioral_policies, target_policies)):
-        p0, _ = behavioral_policy.forward(states) if not behavioral_policy.policy_decentralized else behavioral_policy.forward(states[:,:,env.state_indeces[idx]])
-        p1, _ = target_policy.forward(states) if not target_policy.policy_decentralized else target_policy.forward(states[:,:,env.state_indeces[idx]])
         if isinstance(env.observation_space, Box):
-            kl = 0.5*(p0.mean() - p1.mean()).pow(2) / target_policy.var
-            pe = 0.5*(target_policy.log_of_two_pi + np.log(target_policy.var)+1)
+            mu0, _ = behavioral_policy(states) if not behavioral_policy.policy_decentralized else behavioral_policy(states[:,:,env.state_indeces[idx]])
+            log_std0 = behavioral_policy.log_std
+            mu1, _ = target_policy(states) if not target_policy.policy_decentralized else target_policy(states[:,:,env.state_indeces[idx]])
+            log_std1 = target_policy.log_std
+            var0 = torch.exp(log_std0)**2
+            var1 = torch.exp(log_std1)**2
+            kl = ((0.5 * ((var0 + (mu1-mu0)**2) / (var1 + 1e-7) - 1)
+                     + log_std1 - log_std0)).sum(dim=1).mean()
+            pe = (0.5*(target_policy.log_of_two_pi + log_std1 +1))[0]
         else:
+            p0, _ = behavioral_policy.forward(states) if not behavioral_policy.policy_decentralized else behavioral_policy.forward(states[:,:,env.state_indeces[idx]])
+            p1, _ = target_policy.forward(states) if not target_policy.policy_decentralized else target_policy.forward(states[:,:,env.state_indeces[idx]])
             kl = torch.sum(p0*(torch.log(p0)-torch.log(p1)), dim=(0,1)).mean()
             pe = - torch.sum(p1*(torch.log(p1 + 1e-10)), dim=-1).mean()
         kls.append(kl)
@@ -315,7 +322,7 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
         writer.add_scalar("Exact Mixture Entropy", heatmap_entropy[1], global_step=epoch)
         writer.add_scalar("Exact Entropy A1", heatmap_entropy[2], global_step=epoch)
         writer.add_scalar("Exact Entropy A2", heatmap_entropy[3], global_step=epoch)
-
+    print(policy_entropies)
     # Prepare tabulate table
     table = []
     fancy_float = lambda f : f"{f:.3f}"
@@ -561,7 +568,10 @@ def mamepol(env,
             entropy= [- loss[0].detach().numpy(), -loss[1].detach().numpy()]
             with torch.no_grad():
                 kls, kl_numeric_error, policy_entropies = compute_kl(env, behavioral_policies, target_policies, states)
+            policy_entropies = [pe.numpy() for pe in policy_entropies]
             kls = [kl.numpy() for kl in kls]
+            print(policy_entropies)
+            print(kls)
             if not numeric_error and not kl_numeric_error and any([kl <= kl_threshold for kl in kls]):
                 # Valid update
                 for agent in range(env.n_agents):

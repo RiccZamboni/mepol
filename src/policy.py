@@ -144,7 +144,7 @@ class DiscretePolicy(nn.Module):
         """
         with torch.no_grad():
             state = torch.tensor(state, dtype=float_type).unsqueeze(0)
-            action_probs, action, _ = self.forward(state)
+            action_probs, action = self.forward(state)
             return action
             
     def get_log_p(self, states, actions):
