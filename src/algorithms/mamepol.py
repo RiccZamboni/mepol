@@ -276,7 +276,7 @@ def compute_kl(env, behavioral_policies, target_policies, states):
         p0, _ = behavioral_policy.forward(states) if not behavioral_policy.policy_decentralized else behavioral_policy.forward(states[:,:,env.state_indeces[idx]])
         p1, _ = target_policy.forward(states) if not target_policy.policy_decentralized else target_policy.forward(states[:,:,env.state_indeces[idx]])
         if isinstance(env.observation_space, Box):
-            print(p0)
+            print(p0.size())
             kl = 0.5*(p0.mean() - p1.mean()).pow(2) / target_policy.var
             pe = 0.5*(target_policy.log_of_two_pi + np.log(target_policy.var)+1)
         else:
