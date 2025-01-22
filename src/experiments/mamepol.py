@@ -6,6 +6,8 @@ import numpy as np
 
 from datetime import datetime
 from src.envs.gridworld_continuous_multiagent import GridWorldContinuous
+from src.envs.hand_reach import HandReach
+from src.envs.discretizer import Discretizer
 from src.envs.rooms import Rooms
 from src.envs.push_box import PushBox
 from src.envs.wrappers import ErgodicEnv
@@ -88,7 +90,7 @@ exp_spec = {
     # Multi-Agent Environments
     'Room': {
         'env_create': lambda: Rooms(H=1000, grid_size=10, n_actions=4, n_agents=2),
-        'discretizer_create': lambda env: True,
+        'discretizer_create': lambda env: None,
         'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
         'state_filter': None,
@@ -99,7 +101,7 @@ exp_spec = {
     },
     'GridWorld': {
         'env_create': lambda: ErgodicEnv(GridWorldContinuous()),
-        'discretizer_create': lambda env: None, #Discretizer([[-env.dim, env.dim], [-env.dim, env.dim]], [20, 20]),
+        'discretizer_create': lambda env: None,
         'hidden_sizes': [300, 300],
         'activation': nn.ReLU,
         'log_std_init': -1.5,
@@ -110,7 +112,7 @@ exp_spec = {
     },
     'Push_Box': {
         'env_create': lambda: PushBox(H=1000, grid_size=15, n_actions=4, n_agents=2),
-        'discretizer_create': lambda env: True,
+        'discretizer_create': lambda env: None,
         'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
         'state_filter': None,
@@ -118,7 +120,16 @@ exp_spec = {
         'heatmap_cmap': 'Blues',
         'heatmap_labels': ('X', 'Y'),
         'eps': None
-    }
+    },
+    'HandReach': {
+        'env_create': lambda: ErgodicEnv(HandReach()),
+        'discretizer_create': lambda env: Discretizer([[-6.3, 6.3], [-6.3, 6.3], [-6.3, 6.3], [-6.3, 6.3]], [10, 10, 10, 10], lambda s: [s[0], s[2], s[1], s[4]]),
+        'hidden_sizes': [64, 64],
+        'activation': nn.ReLU,
+        'log_std_init': -0.5,
+        'eps': 0,
+        'state_filter': list(range(12))
+    },
 }
 
 spec = exp_spec.get(args.env)
@@ -129,6 +140,7 @@ if spec is None:
 
 env = spec['env_create']()
 discretizer = spec['discretizer_create'](env)
+env.set_discretizer(discretizer)
 state_filter = spec.get('state_filter')
 eps = spec['eps']
 

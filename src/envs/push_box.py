@@ -66,7 +66,7 @@ class PushBox(object):
             obs.extend([agent.x, agent.y])
         obs.extend([self.box.x, self.box.y])
         self.step_count += 1
-        rew = self._reward()
+        rew = 0 # self._reward()
         self.done = True if self.step_count == self.H or rew >= 1 else False
 
         return np.array(obs), rew, self.done

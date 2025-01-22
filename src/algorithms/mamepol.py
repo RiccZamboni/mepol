@@ -283,19 +283,22 @@ def compute_kl(env, behavioral_policies, target_policies, states):
     # numpy_states = torch.from_numpy(states).type(float_type)
     numeric_error = False
     kls = []
+    policy_entropies = []
     # Compute KL divergence between behavioral and target policy
     for idx, (behavioral_policy, target_policy) in enumerate(zip(behavioral_policies, target_policies)):
         p0, _, _ = behavioral_policy.forward(states) if not behavioral_policy.policy_decentralized else behavioral_policy.forward(states[:,:,env.state_indeces[idx]])
         p1, _, _ = target_policy.forward(states) if not target_policy.policy_decentralized else target_policy.forward(states[:,:,env.state_indeces[idx]])
         kl = torch.sum(p0*(torch.log(p0)-torch.log(p1)), dim=(0,1)).mean()
         kls.append(kl)
+        pe = - torch.sum(p1*(torch.log(p1 + 1e-10)), dim=-1).mean()
+        policy_entropies.append(pe)
         numeric_error = torch.isinf(kl) or torch.isnan(kl) or numeric_error
     # Minimum KL is zero
     kls = [torch.max(torch.tensor(0.0), kl) for kl in kls]
-    return kls, numeric_error
+    return kls, numeric_error, policy_entropies
 
 def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
-                         loss, entropy, num_off_iters, execution_time, full_entropy,
+                         loss, entropy, policy_entropies, num_off_iters, execution_time, full_entropy,
                          heatmap_image, heatmap_entropy, backtrack_iters, backtrack_lr):
     # Log to Tensorboard
     writer.add_scalar("Loss A1", loss[0], global_step=epoch)
@@ -308,6 +311,8 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
     writer.add_scalar("MI A21", entropy[5], global_step=epoch)
     writer.add_scalar("KL A12", entropy[6], global_step=epoch)
     writer.add_scalar("KL A21", entropy[7], global_step=epoch)
+    writer.add_scalar("Entropy Policy A1", policy_entropies[0], global_step=epoch)
+    writer.add_scalar("Entropy Policy A2", policy_entropies[1], global_step=epoch)
     writer.add_scalar("Execution time", execution_time, global_step=epoch)
     writer.add_scalar("Number off-policy iteration", num_off_iters, global_step=epoch)
     if full_entropy is not None:
@@ -329,7 +334,9 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
         ["Joint Entropy", fancy_float(entropy[0])],
         ["Mixture Entropy", fancy_float(entropy[1])],
         ["Entropy A1", fancy_float(entropy[2])],
-        ["Entropy A2", fancy_float(entropy[3])]
+        ["Entropy A2", fancy_float(entropy[3])],
+        ["Entropy PA1", fancy_float(policy_entropies[0])],
+        ["Entropy PA2", fancy_float(policy_entropies[1])]
     ])
 
     if backtrack_iters is not None:
@@ -340,7 +347,7 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
     fancy_grid = tabulate(table, headers="firstrow", tablefmt="fancy_grid", numalign='right')
 
     # Log to csv file 1
-    csv_file_1.write(f"{epoch}, {loss[0]}, {loss[1]}, {entropy[0]}, {entropy[1]}, {entropy[2]}, {entropy[3]},  {entropy[4]}, {entropy[5]},{entropy[6]},{entropy[7]}, {full_entropy}, {num_off_iters}, {execution_time}\n")
+    csv_file_1.write(f"{epoch}, {loss[0]}, {loss[1]}, {entropy[0]}, {entropy[1]}, {entropy[2]}, {entropy[3]},  {entropy[4]}, {entropy[5]},{entropy[6]},{entropy[7]},{policy_entropies[0]},{policy_entropies[1]}, {full_entropy}, {num_off_iters}, {execution_time}\n")
     csv_file_1.flush()
 
     # Log to csv file 2
@@ -458,7 +465,7 @@ def mamepol(env,
     # Create log files
     log_file = open(os.path.join((out_path), 'log_file.txt'), 'a', encoding="utf-8")
     csv_file_1 = open(os.path.join(out_path, f"{env_name}.csv"), 'w')
-    csv_file_1.write(",".join(['epoch', 'loss A1', 'loss A2', 'joint entropy','mixture entropy', 'entropy A1', 'entropy A2', 'MI A12', 'MI A21','kl A12', 'kl A21', 'full_entropy', 'num_off_iters','execution_time']))
+    csv_file_1.write(",".join(['epoch', 'loss A1', 'loss A2', 'joint entropy','mixture entropy', 'entropy A1', 'entropy A2', 'MI A12', 'MI A21','kl A12', 'kl A21', 'entropy PA1', 'entropy PA2', 'full_entropy', 'num_off_iters','execution_time']))
     csv_file_1.write("\n")
 
     if heatmap_discretizer is not None:
@@ -513,13 +520,14 @@ def mamepol(env,
     # Save initial policy
     for agent in range(env.n_agents):
         torch.save(behavioral_policies[agent].state_dict(), os.path.join(out_path, f"{epoch}-policy-{agent}"))
-
+    
     # Log statistics for the initial policy
     log_epoch_statistics(
             writer=writer, log_file=log_file, csv_file_1=csv_file_1, csv_file_2=csv_file_2,
             epoch=epoch,
             loss=loss,
             entropy=[entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21],
+            policy_entropies = [np.log(4), np.log(4)],
             execution_time=execution_time,
             num_off_iters=0,
             full_entropy=None,
@@ -561,7 +569,7 @@ def mamepol(env,
             loss, numeric_error = policy_update(env, kl_threshold_reacheds, optimizers, behavioral_policies, target_policies, states, actions, num_traj, real_traj_lengths, update_algo, beta=beta)
             entropy= [- loss[0].detach().numpy(), -loss[1].detach().numpy()]
             with torch.no_grad():
-                kls, kl_numeric_error = compute_kl(env, behavioral_policies, target_policies, states)
+                kls, kl_numeric_error, policy_entropies = compute_kl(env, behavioral_policies, target_policies, states)
             kls = [kl.numpy() for kl in kls]
             if not numeric_error and not kl_numeric_error and any([kl <= kl_threshold for kl in kls]):
                 # Valid update
@@ -661,6 +669,7 @@ def mamepol(env,
                         epoch=epoch,
                         loss=loss,
                         entropy=[entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21],
+                        policy_entropies = policy_entropies,
                         execution_time=execution_time,
                         num_off_iters=num_off_iters,
                         full_entropy=None,
