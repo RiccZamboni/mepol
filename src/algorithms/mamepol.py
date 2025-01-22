@@ -9,6 +9,7 @@ import time
 import os
 from functools import reduce
 
+from gym.spaces import Box, MultiDiscrete
 from tabulate import tabulate
 from joblib import Parallel, delayed
 from sklearn.neighbors import NearestNeighbors
@@ -198,9 +199,9 @@ def compute_distributions(env, states, num_traj, real_traj_lengths):
     a12_ind = env.distribution_indices[0]
     a1_ind = env.distribution_indices[1]
     a2_ind = env.distribution_indices[2]
-    dim_states = env.num_features #tuple(env.observation_space.nvec[a12_ind]) 
-    dim_states_a1 = env.num_features_per_agent#tuple(env.observation_space.nvec[a1_ind])
-    dim_states_a2 = env.num_features_per_agent #tuple(env.observation_space.nvec[a2_ind])
+    dim_states = tuple(env.obs_space_dims[a12_ind]) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a12_ind]) 
+    dim_states_a1 = tuple(env.obs_space_dims[a1_ind]) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a1_ind])
+    dim_states_a2 = tuple(env.obs_space_dims[a2_ind]) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a2_ind])
     states_counter = torch.zeros((num_traj,) + dim_states,  dtype=float_type)
     states_counter_a1 = torch.zeros((num_traj,) + dim_states_a1,  dtype=float_type)
     states_counter_a2 = torch.zeros((num_traj,) + dim_states_a2,  dtype=float_type)
