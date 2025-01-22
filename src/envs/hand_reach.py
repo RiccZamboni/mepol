@@ -13,7 +13,7 @@ class HandReach(gym.Wrapper):
         self.num_features = 4 #only angles
         self.num_features_per_agent = 2
         self.n_actions = 1
-        self.action_dim = 1
+        self.action_dim = 2
         self.state_indeces = [[0,1], [2,3]]
         self.action_indeces = [[0], [1]]
         self.distribution_indices = [[0,1,2,3], [0,1], [2,3]]
