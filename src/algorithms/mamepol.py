@@ -198,9 +198,9 @@ def compute_distributions(env, states, num_traj, real_traj_lengths):
     a12_ind = env.distribution_indices[0]
     a1_ind = env.distribution_indices[1]
     a2_ind = env.distribution_indices[2]
-    dim_states = tuple(env.observation_space.nvec[a12_ind])
-    dim_states_a1 = tuple(env.observation_space.nvec[a1_ind])
-    dim_states_a2 = tuple(env.observation_space.nvec[a2_ind])
+    dim_states = env.num_features #tuple(env.observation_space.nvec[a12_ind]) 
+    dim_states_a1 = env.num_features_per_agent#tuple(env.observation_space.nvec[a1_ind])
+    dim_states_a2 = env.num_features_per_agent #tuple(env.observation_space.nvec[a2_ind])
     states_counter = torch.zeros((num_traj,) + dim_states,  dtype=float_type)
     states_counter_a1 = torch.zeros((num_traj,) + dim_states_a1,  dtype=float_type)
     states_counter_a2 = torch.zeros((num_traj,) + dim_states_a2,  dtype=float_type)
