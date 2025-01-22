@@ -28,13 +28,13 @@ class HandReach(gym.Wrapper):
 
     def step(self, action):
         obs, reward, done, info = super().step(action)
-        s = self.discretizer.discretize(obs[(0,1,2,3)])
+        s = self.discretizer.discretize(obs[0,1,2,3])
         return s, reward, done, info
 
     def reset(self):
         obs = super().reset()
-        s = self.discretizer.discretize(obs[(0,1,2,3)])
-        return self.discretizer.discretize(obs[(0,1,2,3)])
+        s = self.discretizer.discretize(obs[0,1,2,3])
+        return self.discretizer.discretize(obs[0,1,2,3])
 
     def render(self, mode='human'):
         return super().render(mode)
