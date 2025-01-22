@@ -18,7 +18,7 @@ class Discretizer:
         if self.lambda_transform is None:
             return tuple(np.digitize(x=features[i], bins=self.bins[i]) for i in range(len(features)))
         else:
-            features = self.lambda_transform(features)
+            # features = self.lambda_transform(features)
             return tuple(np.digitize(x=features[i], bins=self.bins[i]) for i in range(len(features)))
 
 
