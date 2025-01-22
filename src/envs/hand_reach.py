@@ -35,6 +35,7 @@ class HandReach(gym.Wrapper):
     def reset(self):
         obs_data = super().reset()
         obs = obs_data[0]
+        print(obs)
         s = self.discretizer.discretize([obs[0],obs[2],obs[1],obs[3]])
         print(s)
         return self.discretizer.discretize([obs[0],obs[2],obs[1],obs[3]])
