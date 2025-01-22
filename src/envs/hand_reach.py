@@ -22,7 +22,7 @@ class HandReach(gym.Wrapper):
 
     def set_discretizer(self, discretizer=None):
         self.discretizer = discretizer
-        self.obs_space_dims = (discretizer.bins_sizes,)*self.num_features
+        self.obs_space_dims = np.array([discretizer.bins_sizes,]*self.num_features)
     
     def seed(self, seed=None):
         return super().seed(seed)
