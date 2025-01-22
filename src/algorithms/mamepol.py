@@ -199,9 +199,9 @@ def compute_distributions(env, states, num_traj, real_traj_lengths):
     a12_ind = env.distribution_indices[0]
     a1_ind = env.distribution_indices[1]
     a2_ind = env.distribution_indices[2]
-    dim_states = tuple(env.obs_space_dims[a12_ind]) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a12_ind]) 
-    dim_states_a1 = tuple(env.obs_space_dims[a1_ind]) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a1_ind])
-    dim_states_a2 = tuple(env.obs_space_dims[a2_ind]) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a2_ind])
+    dim_states = tuple(env.discretizer.bins_sizes, env.discretizer.bins_sizes, env.discretizer.bins_sizes, env.discretizer.bins_sizes ) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a12_ind]) 
+    dim_states_a1 = tuple(env.discretizer.bins_sizes, env.discretizer.bins_sizes) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a1_ind])
+    dim_states_a2 = tuple(env.discretizer.bins_sizes, env.discretizer.bins_sizes) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a2_ind])
     states_counter = torch.zeros((num_traj,) + dim_states,  dtype=float_type)
     states_counter_a1 = torch.zeros((num_traj,) + dim_states_a1,  dtype=float_type)
     states_counter_a2 = torch.zeros((num_traj,) + dim_states_a2,  dtype=float_type)
