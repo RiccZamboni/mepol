@@ -1,7 +1,7 @@
 import gym
 import numpy as np
 
-from gym.spaces import Box, MultiDiscrete
+from gym.spaces import Box
 
 
 class HandReach(gym.Wrapper):
