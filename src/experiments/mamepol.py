@@ -129,7 +129,9 @@ exp_spec = {
         'log_std_init': -0.5,
         'eps': 0,
         'state_filter': list(range(12)),
-        'heatmap_labels': ('X', 'Y')
+        'heatmap_labels': ('X', 'Y'),
+        'heatmap_interp': 'spline16',
+        'heatmap_cmap': 'Blues',
     },
 }
 

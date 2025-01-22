@@ -322,7 +322,7 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
         writer.add_scalar("Exact Mixture Entropy", heatmap_entropy[1], global_step=epoch)
         writer.add_scalar("Exact Entropy A1", heatmap_entropy[2], global_step=epoch)
         writer.add_scalar("Exact Entropy A2", heatmap_entropy[3], global_step=epoch)
-    print(policy_entropies)
+    #print(policy_entropies)
     # Prepare tabulate table
     table = []
     fancy_float = lambda f : f"{f:.3f}"
@@ -362,7 +362,7 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
     # Log to stdout and log file
     log_file.write(fancy_grid)
     log_file.flush()
-    print(fancy_grid)
+    # print(fancy_grid)
 
 
 def log_off_iter_statistics(writer, csv_file_3, epoch, global_off_iter,
@@ -570,8 +570,8 @@ def mamepol(env,
                 kls, kl_numeric_error, policy_entropies = compute_kl(env, behavioral_policies, target_policies, states)
             policy_entropies = [pe.numpy() for pe in policy_entropies]
             kls = [kl.numpy() for kl in kls]
-            print(policy_entropies)
-            print(kls)
+            # print(policy_entropies)
+            # print(kls)
             if not numeric_error and not kl_numeric_error and any([kl <= kl_threshold for kl in kls]):
                 # Valid update
                 for agent in range(env.n_agents):
