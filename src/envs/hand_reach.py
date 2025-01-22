@@ -14,9 +14,9 @@ class HandReach(gym.Wrapper):
         self.num_features_per_agent = 2
         self.n_actions = 1
         self.action_dim = 1
-        self.state_indeces = [[0,2], [1,3]]
+        self.state_indeces = [[0,1], [2,3]]
         self.action_indeces = [[0], [1]]
-        self.distribution_indices = [[0,1,2,3], [0,2], [1,3]]
+        self.distribution_indices = [[0,1,2,3], [0,1], [2,3]]
         self.discrete = False
         self.discretizer = None
 
@@ -27,14 +27,14 @@ class HandReach(gym.Wrapper):
         return super().seed(seed)
 
     def step(self, action):
-        obs_dict, reward, done, info = super().step(action)
-        s = self.discretizer.discretize(obs_dict['joint_positions'])
+        obs, reward, done, info = super().step(action)
+        s = self.discretizer.discretize(obs[(0,1,2,3)])
         return s, reward, done, info
 
     def reset(self):
-        obs_dict = super().reset()
-        s = self.discretizer.discretize(obs_dict['joint_positions'])
-        return self.discretizer.discretize(obs_dict['joint_positions'])
+        obs = super().reset()
+        s = self.discretizer.discretize(obs[(0,1,2,3)])
+        return self.discretizer.discretize(obs[(0,1,2,3)])
 
     def render(self, mode='human'):
         return super().render(mode)
