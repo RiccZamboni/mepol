@@ -56,13 +56,14 @@ class GaussianPolicy(nn.Module):
 
     def forward(self, x, deterministic=False):
         mean = self.mean(self.net(x))
+        var = torch.exp(self.log_std)**2
+        log_prob = -0.5 * (((x - mean) ** 2) / var + torch.log(2 * torch.pi * var))
+        log_prob = log_prob.sum(dim=-1)  # Sum over action dimensions
 
-        if deterministic:
-            output = mean
-        else:
-            output = mean + torch.randn(mean.size(), dtype=float_type) * torch.exp(self.log_std)
+        # Convert log probability to probability
+        prob = torch.exp(log_prob)
 
-        return mean, output
+        return prob, None, log_prob
 
 
     def predict(self, s, deterministic=False):
@@ -129,7 +130,6 @@ class DiscretePolicy(nn.Module):
         distribution = torch.distributions.Categorical(action_probs)
         action = distribution.sample()
         log_prob = distribution.log_prob(action)
-        entropy = distribution.entropy()
         
         return action_probs, action, log_prob
     
