@@ -9,14 +9,11 @@ import time
 import os
 from functools import reduce
 
-from gym.spaces import Box, MultiDiscrete
 from tabulate import tabulate
 from joblib import Parallel, delayed
-from sklearn.neighbors import NearestNeighbors
 from torch.utils import tensorboard
 
 from src.utils.dtypes import float_type, int_type
-from src.utils.convert2base import obs_to_int_pi, s_to_sp, convert_to_base
 
 
 def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, interp, labels):
@@ -166,23 +163,17 @@ def compute_importance_weights(env, behavioral_policies, target_policies, states
     return importance_weights, importance_weights_norm, importance_weights_norm_a1, importance_weights_norm_a2
 
 def compute_full_distributions(env, states, num_traj, real_traj_lengths):
-    a12_ind = env.distribution_indices[0]
-    a1_ind = env.distribution_indices[1]
-    a2_ind = env.distribution_indices[2]
-    dim_states = tuple(env.observation_space.nvec[a12_ind])
-    dim_states_a1 = tuple(env.observation_space.nvec[a1_ind])
-    dim_states_a2 = tuple(env.observation_space.nvec[a2_ind])
-    states_counter = torch.zeros((num_traj,) + dim_states,  dtype=float_type)
-    states_counter_a1 = torch.zeros((num_traj,) + dim_states_a1,  dtype=float_type)
-    states_counter_a2 = torch.zeros((num_traj,) + dim_states_a2,  dtype=float_type)
+    states_counter = torch.zeros((num_traj,) + env.dim_states,  dtype=float_type)
+    states_counter_a1 = torch.zeros((num_traj,) + env.dim_states_a1,  dtype=float_type)
+    states_counter_a2 = torch.zeros((num_traj,) + env.dim_states_a2,  dtype=float_type)
     states = states.to(int_type)
     for n_traj in range(num_traj):
         traj_length = real_traj_lengths[n_traj][0]
         traj_states = states[n_traj, :traj_length]
         for state in traj_states:
-            indices = (n_traj,) + tuple(state[a12_ind].tolist())
-            indices_a1 = (n_traj,) + tuple(state[a1_ind].tolist())
-            indices_a2 = (n_traj,) + tuple(state[a2_ind].tolist())
+            indices = (n_traj,) + tuple(state[env.a12_ind].tolist())
+            indices_a1 = (n_traj,) + tuple(state[env.a1_ind].tolist())
+            indices_a2 = (n_traj,) + tuple(state[env.a2_ind].tolist())
             states_counter[indices] +=1
             states_counter_a1[indices_a1] +=1
             states_counter_a2[indices_a2] +=1
@@ -196,23 +187,17 @@ def compute_full_distributions(env, states, num_traj, real_traj_lengths):
 
 
 def compute_distributions(env, states, num_traj, real_traj_lengths):
-    a12_ind = env.distribution_indices[0]
-    a1_ind = env.distribution_indices[1]
-    a2_ind = env.distribution_indices[2]
-    dim_states = tuple([env.discretizer.bins_sizes[0], env.discretizer.bins_sizes[1], env.discretizer.bins_sizes[2], env.discretizer.bins_sizes[3]]) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a12_ind]) 
-    dim_states_a1 = tuple([env.discretizer.bins_sizes[0], env.discretizer.bins_sizes[1]])if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a1_ind])
-    dim_states_a2 = tuple([env.discretizer.bins_sizes[2], env.discretizer.bins_sizes[3]]) if isinstance(env.observation_space, Box) else tuple(env.observation_space.nvec[a2_ind])
-    states_counter = torch.zeros((num_traj,) + dim_states,  dtype=float_type)
-    states_counter_a1 = torch.zeros((num_traj,) + dim_states_a1,  dtype=float_type)
-    states_counter_a2 = torch.zeros((num_traj,) + dim_states_a2,  dtype=float_type)
+    states_counter = torch.zeros((num_traj,) + env.dim_states,  dtype=float_type)
+    states_counter_a1 = torch.zeros((num_traj,) + env.dim_states_a1,  dtype=float_type)
+    states_counter_a2 = torch.zeros((num_traj,) + env.dim_states_a2,  dtype=float_type)
     states = states.to(int_type)
     for n_traj in range(num_traj):
         traj_length = real_traj_lengths[n_traj][0]
         traj_states = states[n_traj, :traj_length]
         for state in traj_states:
-            indices = (n_traj,) + tuple(state[a12_ind].tolist())
-            indices_a1 = (n_traj,) + tuple(state[a1_ind].tolist())
-            indices_a2 = (n_traj,) + tuple(state[a2_ind].tolist())
+            indices = (n_traj,) + tuple(state[env.a12_ind].tolist())
+            indices_a1 = (n_traj,) + tuple(state[env.a1_ind].tolist())
+            indices_a2 = (n_traj,) + tuple(state[env.a2_ind].tolist())
             states_counter[indices] +=1
             states_counter_a1[indices_a1] +=1
             states_counter_a2[indices_a2] +=1

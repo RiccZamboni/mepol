@@ -1,6 +1,8 @@
 import gym
 import numpy as np
 
+from gym.spaces import Box, MultiDiscrete
+
 
 class HandReach(gym.Wrapper):
 
@@ -17,11 +19,17 @@ class HandReach(gym.Wrapper):
         self.state_indeces = [[0,1], [2,3]]
         self.action_indeces = [[0], [1]]
         self.distribution_indices = [[0,1,2,3], [0,1], [2,3]]
+        self.a12_ind = self.distribution_indices[0]
+        self.a1_ind = self.distribution_indices[1]
+        self.a2_ind = self.distribution_indices[2]
         self.discrete = False
         self.discretizer = None
 
     def set_discretizer(self, discretizer=None):
         self.discretizer = discretizer
+        self.dim_states = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1], self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a12_ind]) 
+        self.dim_states_a1 = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1]])if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a1_ind])
+        self.dim_states_a2 = tuple([self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a2_ind])
         # self.obs_space_dims = np.array([discretizer.bins_sizes,]*self.num_features)
     
     def seed(self, seed=None):

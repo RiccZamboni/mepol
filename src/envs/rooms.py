@@ -2,6 +2,8 @@ import gym
 import numpy as np
 import copy
 
+from gym.spaces import Box, MultiDiscrete
+
 TOP = 0
 BOT = 1
 LEFT = 2
@@ -34,6 +36,9 @@ class Rooms(gym.Env):
 
         self.observation_space = gym.spaces.MultiDiscrete([grid_size, grid_size, grid_size, grid_size, 2])
         self.obs_group_sizes = [2, 2, 1]
+        self.a12_ind = self.distribution_indices[0]
+        self.a1_ind = self.distribution_indices[1]
+        self.a2_ind = self.distribution_indices[2]
         # each agent can choose one branch at each timestep
         self.action_space = gym.spaces.MultiDiscrete([n_actions] * n_agents)
         self.init_agents = [Entity(1 + grid_size // 10, 1 + grid_size // 10), Entity(grid_size // 10, grid_size // 10)]
@@ -86,6 +91,9 @@ class Rooms(gym.Env):
 
     def set_discretizer(self, discretizer=None):
         self.discretizer = discretizer
+        self.dim_states = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1], self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a12_ind]) 
+        self.dim_states_a1 = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1]])if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a1_ind])
+        self.dim_states_a2 = tuple([self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a2_ind])
         # self.obs_space_dims = np.array([discretizer.bins_sizes,]*self.num_features)
 
     def _update_agent_location(self, agent_id, action):
