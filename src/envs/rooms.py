@@ -84,6 +84,10 @@ class Rooms(gym.Env):
         self.done = True if self.step_count == self.H else False
         return np.array(obs), rew, self.done
 
+    def set_discretizer(self, discretizer=None):
+        self.discretizer = discretizer
+        # self.obs_space_dims = np.array([discretizer.bins_sizes,]*self.num_features)
+
     def _update_agent_location(self, agent_id, action):
         x, y = self.agents[agent_id].x, self.agents[agent_id].y
         if action == TOP and y > 0 and self.wall_map[y - 1, x] == 0:
