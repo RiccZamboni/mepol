@@ -31,7 +31,7 @@ class GaussianPolicy(nn.Module):
 
         self.mean = nn.Linear(hidden_sizes[-1], action_dim)
         self.log_std = nn.Parameter(log_std_init * torch.ones(action_dim, dtype=float_type))
-        self.var = torch.exp(2*log_std_init)
+        self.var = np.exp(2*log_std_init)
         # Constants
         self.log_of_two_pi = torch.tensor(np.log(2*np.pi), dtype=float_type)
 

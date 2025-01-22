@@ -277,7 +277,7 @@ def compute_kl(env, behavioral_policies, target_policies, states):
         p1, _ = target_policy.forward(states) if not target_policy.policy_decentralized else target_policy.forward(states[:,:,env.state_indeces[idx]])
         if isinstance(env.observation_space, Box):
             kl = 0.5*(p0 - p1).pow(2) / target_policy.var
-            pe = 0.5*(target_policy.log_of_two_pi + torch.log(target_policy.var)+1)
+            pe = 0.5*(target_policy.log_of_two_pi + np.log(target_policy.var)+1)
         else:
             kl = torch.sum(p0*(torch.log(p0)-torch.log(p1)), dim=(0,1)).mean()
             pe = - torch.sum(p1*(torch.log(p1 + 1e-10)), dim=-1).mean()
