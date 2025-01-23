@@ -35,6 +35,21 @@ def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, in
         # Perform the sum
         d_a1_marg, d_a2_marg = torch.sum(d_a1, dim=axes_dim), torch.sum(d_a2, dim=axes_dim)
         log_p_1, log_p_2 = np.ma.log(d_a1_marg), np.ma.log(d_a2_marg)
+    elif isinstance(env.observation_space, Box):
+        # Plot the heatmap
+        log_p = np.ma.log(d_full)
+        log_p_ravel = log_p.ravel()
+        log_p.filled(np.min(log_p_ravel))
+        heatmap = env.compute_heatmap(log_p)
+        image_fig = plt.figure(figsize=(10, 5))
+        plt.imshow(heatmap, interpolation=interp, cmap=cmap)
+        plt.title("Tip Position Distribution")
+        plt.xlabel(labels[0])
+        plt.ylabel(labels[1])
+        plt.xticks([])
+        plt.yticks([])
+        plt.tight_layout()
+        return None, [e_full.item(), e_mix.item(), e_a1.item(), e_a2.item()], image_fig
     else: 
         image_fig, axes = plt.subplots(1, 2, figsize=(10, 5)) 
         axes_dim = 2

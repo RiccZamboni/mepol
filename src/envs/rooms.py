@@ -91,10 +91,10 @@ class Rooms(gym.Env):
 
     def set_discretizer(self, discretizer=None):
         self.discretizer = discretizer
-        self.dim_states = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1], self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a12_ind]) 
-        self.dim_states_a1 = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1]])if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a1_ind])
-        self.dim_states_a2 = tuple([self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a2_ind])
-        # self.obs_space_dims = np.array([discretizer.bins_sizes,]*self.num_features)
+        self.dim_states =  tuple(self.observation_space.nvec[self.a12_ind]) 
+        self.dim_states_a1 =  tuple(self.observation_space.nvec[self.a1_ind])
+        self.dim_states_a2 = tuple(self.observation_space.nvec[self.a2_ind])
+
 
     def _update_agent_location(self, agent_id, action):
         x, y = self.agents[agent_id].x, self.agents[agent_id].y

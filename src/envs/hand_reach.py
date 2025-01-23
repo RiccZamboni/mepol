@@ -1,7 +1,6 @@
 import gym
 import numpy as np
-
-from gym.spaces import Box
+from itertools import product
 
 
 class HandReach(gym.Wrapper):
@@ -27,10 +26,9 @@ class HandReach(gym.Wrapper):
 
     def set_discretizer(self, discretizer=None):
         self.discretizer = discretizer
-        self.dim_states = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1], self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a12_ind]) 
-        self.dim_states_a1 = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1]])if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a1_ind])
-        self.dim_states_a2 = tuple([self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) if isinstance(self.observation_space, Box) else tuple(self.observation_space.nvec[self.a2_ind])
-        # self.obs_space_dims = np.array([discretizer.bins_sizes,]*self.num_features)
+        self.dim_states = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1], self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) 
+        self.dim_states_a1 = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1]])
+        self.dim_states_a2 = tuple([self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) 
     
     def seed(self, seed=None):
         return super().seed(seed)
@@ -44,11 +42,65 @@ class HandReach(gym.Wrapper):
 
     def reset(self):
         obs_data = super().reset()
-        # obs = obs_data[0]
-        # print(obs)
-        # s = self.discretizer.discretize([obs[0],obs[2],obs[1],obs[3]])
-        # print(s)
         return self.discretizer.discretize([obs_data[0][0],obs_data[0][2],obs_data[0][1],obs_data[0][3]])
 
     def render(self, mode='human'):
         return super().render(mode)
+    
+
+    def compute_tip_position(self, sin1, cos1, sin2, cos2, l1=1.0, l2=1.0):
+        # Compute sin and cos of (theta1 + theta2)
+        sin12 = sin1 * cos2 + cos1 * sin2
+        cos12 = cos1 * cos2 - sin1 * sin2
+        
+        # Compute x and y positions
+        x = l1 * cos1 + l2 * cos12
+        y = l1 * sin1 + l2 * sin12
+        
+        return x, y
+    
+    def compute_heatmap(self, distribution_values):
+        # Initialise a 2D grid for heatmap
+        bin_size = self.discretizer.bins_sizes[0]
+        grid_size = bin_size ** 2
+        # Link lengths
+        l1, l2 = 1.0, 1.0
+        # Corresponding values of cos and sin for each index (adjust as needed)
+        cos_values = np.linspace(-1, 1, bin_size)  # Example range for cos
+        sin_values = np.linspace(-1, 1, bin_size)  # Example range for sin
+        x_range = np.linspace(-2 * l1, 2 * l2, grid_size)
+        y_range = np.linspace(-2 * l1, 2 * l2, grid_size)
+        heatmap = np.zeros((grid_size, grid_size))
+
+        # Map position to grid
+        def map_to_grid(x, y, x_range, y_range, grid_size):
+            x_idx = np.searchsorted(x_range, x, side="right") - 1
+            y_idx = np.searchsorted(y_range, y, side="right") - 1
+            if 0 <= x_idx < grid_size and 0 <= y_idx < grid_size:
+                return x_idx, y_idx
+            return None
+
+        # Compute the heatmap
+        for i_cos1, i_sin1, i_cos2, i_sin2 in product(range(bin_size), repeat=4):
+            # Joint probability for this combination
+            prob = distribution_values[i_cos1, i_sin1, i_cos2, i_sin2]
+            
+            # Get the values of cos and sin
+            cos1, sin1 = cos_values[i_cos1], sin_values[i_sin1]
+            cos2, sin2 = cos_values[i_cos2], sin_values[i_sin2]
+            
+            # Compute sin and cos of (theta1 + theta2)
+            sin12 = sin1 * cos2 + cos1 * sin2
+            cos12 = cos1 * cos2 - sin1 * sin2
+            
+            # Compute the (x, y) position
+            x = l1 * cos1 + l2 * cos12
+            y = l1 * sin1 + l2 * sin12
+            
+            # Map the position to the heatmap grid
+            grid_pos = map_to_grid(x, y, x_range, y_range, grid_size)
+            if grid_pos:
+                heatmap[grid_pos[1], grid_pos[0]] += prob
+        heatmap /= heatmap.sum()     
+        return heatmap
+
