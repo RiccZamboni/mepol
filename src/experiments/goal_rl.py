@@ -7,6 +7,9 @@ import numpy as np
 from datetime import datetime
 from src.envs.rooms import Rooms
 from src.algorithms.matrpo import matrpo
+from src.envs.wrappers import ErgodicEnv
+from src.envs.hand_reach import HandReach
+from src.envs.discretizer import Discretizer
 from src.policy import GaussianPolicy, DiscretePolicy, train_supervised
 
 
@@ -73,6 +76,18 @@ exp_spec = {
         'heatmap_cmap': 'Blues',
         'heatmap_labels': ('X', 'Y')
     },
+    'HandReach': {
+        'env_create': lambda: ErgodicEnv(HandReach()),
+        'discretizer_create': lambda env: Discretizer([[-1, 1], [-1, 1], [-1, 1], [-1, 1]], [5, 5, 5, 5], lambda s: [s[0], s[2], s[1], s[3]]),
+        'hidden_sizes': [64, 64],
+        'activation': nn.ReLU,
+        'log_std_init': -0.5,
+        'eps': 0,
+        'state_filter': list(range(12)),
+        'heatmap_labels': ('X', 'Y'),
+        'heatmap_interp': 'spline16',
+        'heatmap_cmap': 'Blues',
+    },
 
 }
 
@@ -83,16 +98,31 @@ if spec is None:
     exit()
 
 env = spec['env_create']()
+discretizer = spec['discretizer_create'](env)
+env.set_discretizer(discretizer)
+state_filter = spec.get('state_filter')
 
 
-def create_policy():
-    policy = DiscretePolicy(
-        num_features=env.num_features_per_agent,
-        hidden_sizes=spec['hidden_sizes'],
-        action_dim=env.n_actions,
-        activation=spec['activation'],
-        decentralized = True
-    )
+def create_policy(discrete, agent_id=None):
+    if discrete:
+        policy = DiscretePolicy(
+            num_features=env.num_features_per_agent,
+            hidden_sizes=spec['hidden_sizes'],
+            action_dim=env.n_actions,
+            activation=spec['activation'],
+            decentralized = True
+        )
+    else:
+        policy = GaussianPolicy(
+                    num_features=env.num_features_per_agent,
+                    hidden_sizes=spec['hidden_sizes'],
+                    action_dim=env.n_actions,
+                    activation=spec['activation'],
+                    log_std_init=spec['log_std_init'],
+                    decentralized = True
+                    )
+        if agent_id is not None:
+            policy = train_supervised(env, policy, train_steps=100, batch_size=5000, agent_id=agent_id)
     return policy
 
 vfuncs = []
@@ -125,14 +155,14 @@ policies = []
 for agent in range(env.n_agents):
     if args.policy_init is not None:
         kind = args.policy_init.replace("/", "__")
-        policy = create_policy()
+        policy = create_policy(env.discrete)
         policy_path = "/Users/riccardozamboni/Documents/PhD/Git/mepol/pretrained/" + args.policy_init + "policy-" + str(agent)
         current_directory = os.path.dirname(os.path.abspath(__file__))
         policy.load_state_dict(torch.load(policy_path))
         policies.extend([policy])
     else:
         kind = 'RandomInit'
-        policy = create_policy()
+        policy = create_policy(env.discrete, agent)
         policies.extend([policy])
 
 

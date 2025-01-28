@@ -13,6 +13,8 @@ from tabulate import tabulate
 from joblib import Parallel, delayed
 from torch.utils import tensorboard
 from gym.spaces import Box
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 
 from src.utils.dtypes import float_type, int_type
 
@@ -28,6 +30,15 @@ def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, in
     d_mix = (d_a1 + d_a2)/2
     e_full, e_mix, e_a1, e_a2 = - torch.sum(d_full*torch.log(d_full)), -torch.sum(d_mix*torch.log(d_mix)), - torch.sum(d_a1*torch.log(d_a1)), - torch.sum(d_a2*torch.log(d_a2))
     plt.close()
+    # Get default sizes and increase by 20%
+    plt.rcParams.update({
+        'font.size': 12 * 2.6,  # base font size
+        'axes.titlesize': 14 *2.6,  # title size
+        'axes.labelsize': 12 * 2.6,  # x and y labels size
+        'xtick.labelsize': 10 * 2.6,  # x tick labels size
+        'ytick.labelsize': 10 * 2.6,  # y tick labels size
+        'legend.fontsize': 10 * 2.6,  # legend size
+    })
     
     if d_a2.ndim == 4:
         image_fig, axes = plt.subplots(1, 3, figsize=(10, 5)) 
@@ -37,50 +48,73 @@ def get_heatmap(env, policies, heatmap_discretizer, num_traj, traj_len, cmap, in
         log_p_1, log_p_2 = np.ma.log(d_a1_marg), np.ma.log(d_a2_marg)
     elif isinstance(env.observation_space, Box):
         # Plot the heatmap
-        log_p = np.ma.log(d_full)
-        log_p_ravel = log_p.ravel()
-        log_p.filled(np.min(log_p_ravel))
-        heatmap = env.compute_heatmap(log_p)
-        image_fig = plt.figure(figsize=(10, 5))
-        plt.imshow(heatmap, interpolation=interp, cmap=cmap)
-        plt.title("Tip Position Distribution")
-        plt.xlabel(labels[0])
-        plt.ylabel(labels[1])
-        plt.xticks([])
-        plt.yticks([])
-        plt.tight_layout()
-        return None, [e_full.item(), e_mix.item(), e_a1.item(), e_a2.item()], image_fig
+        heatmap = env.compute_heatmap(d_full)
+        x_indices, y_indices = np.meshgrid(range(heatmap.shape[0]), range(heatmap.shape[1]), indexing="ij")
+        # Flatten the data for plotting
+        x_pos = x_indices.ravel()
+        y_pos = y_indices.ravel()
+        z_pos = np.zeros_like(x_pos)  # Start bars from z = 0
+        values = heatmap.ravel()        # Flatten the array for heights
+        # Bar dimensions
+        dx = dy = 0.7  # Width of the bars
+        dz = values    # Heights of the bars (array values)
+        # Step 3: Plot the 3D histogram
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111, projection="3d")
+        # Step 3: Prepare the colour map and alpha shading
+        norm = Normalize(vmin=values.min(), vmax=values.max())  # Normalise values for the colour map
+        colors = plt.cm.cool(norm(values))  # Colour map based on normalised values
+        alpha_values = np.clip(values / values.max(), 0.1, 1)  # Scale alpha to (0.1, 1)
+        colors[:, 3] = alpha_values  # Set the alpha channel for transparency
+        # Add bars
+        ax.bar3d(x_pos, y_pos, z_pos, dx, dy, dz, shade=False, color=colors)
+        # Set labels
+        ax.set_axis_off()  # Turn off axes completely
+        ax.grid(False) 
+        ax.set_title("Tip Distribution Probability")
+        # Step 5: Add a colour bar below the plot
+        sm = ScalarMappable(cmap='cool', norm=norm)  # Map the normalised data to the colour map
+        sm.set_array([])  # ScalarMappable requires an array to initialise
+        cbar_ax = fig.add_axes([0.2, 0.05, 0.6, 0.02])  # [left, bottom, width, height] in figure coordinates
+        cbar = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")  # Add horizontal colour bar
+        cbar.set_label("Array Values") 
+        return _, [e_full.item(), e_mix.item(), e_a1.item(), e_a2.item()], fig
     else: 
-        image_fig, axes = plt.subplots(1, 2, figsize=(10, 5)) 
-        axes_dim = 2
+        image_fig = plt.figure(figsize=(10, 5)) 
+        ax1 = image_fig.add_subplot(121, projection="3d")
+        ax1.view_init(elev=40, azim=60)
+        ax2 = image_fig.add_subplot(122, projection="3d")
+        ax2.view_init(elev=40, azim=60)
+        plt.subplots_adjust(wspace=0.1)
         log_p_1, log_p_2 = np.ma.log(d_a1), np.ma.log(d_a2)
-    
     log_p_1_ravel, log_p_2_ravel = log_p_1.ravel(), log_p_2.ravel()
-    axes[0].imshow(log_p_1.filled(np.min(log_p_1_ravel)), interpolation=interp, cmap=cmap)
-    axes[0].set_title("Agent 1")
-    axes[0].set_xticks([])
-    axes[0].set_yticks([])
-    axes[0].set_xlabel(labels[0])
-    axes[0].set_ylabel(labels[1])
-    # 
-    axes[1].imshow(log_p_2.filled(np.min(log_p_2_ravel)), interpolation=interp, cmap=cmap)
-    axes[1].set_title("Agent 2")
-    axes[1].set_xticks([])
-    axes[1].set_yticks([])
-    axes[1].set_xlabel(labels[0])
-    axes[1].set_ylabel(labels[1])
-    if d_a2.ndim == 4:
-        axes_dim = tuple(range(0, d_a1.ndim-2))
-        d_p_marg = torch.sum(d_a1, dim=axes_dim)
-        log_p_c = np.ma.log(d_p_marg)
-        axes[2].imshow(log_p_c.filled(np.min(log_p_c)), interpolation=interp, cmap=cmap)
-        axes[2].set_title("Box")
-        axes[2].set_xticks([])
-        axes[2].set_yticks([])
-        axes[2].set_xlabel(labels[0])
-        axes[2].set_ylabel(labels[1])
+    x_indices, y_indices = np.meshgrid(range(log_p_1.shape[0]), range(log_p_1.shape[1]), indexing="ij")
+    x_pos = x_indices.ravel()
+    y_pos = y_indices.ravel()
+    z_pos = np.zeros_like(x_pos)
+    # Bar dimensions
+    dx = dy = 0.7  # Width of the bars
+    values_p1 = d_a1.ravel()# log_p_1_ravel.filled(np.min(log_p_1_ravel))
+    values_p2 = d_a2.ravel()# log_p_2_ravel.filled(np.min(log_p_2_ravel))
+    # Step 3: Prepare the colour map and alpha shading
+    norm = Normalize(vmin=torch.min(values_p1.min(),values_p2.min()), vmax=torch.max(values_p1.max(),values_p2.max()))
+    colors_1 = plt.cm.cool(norm(values_p1))
+    colors_2 = plt.cm.cool(norm(values_p2))
+    alpha_values_1 = np.clip(values_p1 / values_p1.max(), 0.1, 1) 
+    alpha_values_2 = np.clip(values_p2 / values_p2.max(), 0.1, 1) 
+    colors_1[:, 3] = 0.2 #alpha_values_1  # Set the alpha channel for transparency
+    colors_2[:, 3] = 0.2# alpha_values_2  # Set the alpha channel for transparency
+    # Add bars
+    ax1.bar3d(x_pos, y_pos, z_pos, dx, dy, values_p1, shade=False, color=colors_1)
+    # Set labels
+    ax1.set_axis_off()  # Turn off axes completely
+    ax1.grid(False) 
+    # Add bars
+    ax2.bar3d(x_pos, y_pos, z_pos, dx, dy, values_p2, shade=False, color=colors_2)
+    # Set labels
+    ax2.set_axis_off()  # Turn off axes completely
+    ax2.grid(False) 
     plt.tight_layout()
-
     return None, [e_full.item(), e_mix.item(), e_a1.item(), e_a2.item()], image_fig
 
 
@@ -310,7 +344,7 @@ def compute_kl(env, behavioral_policies, target_policies, states):
     kls = [torch.max(torch.tensor(0.0), kl) for kl in kls]
     return kls, numeric_error, policy_entropies
 
-def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
+def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2,  epoch,
                          loss, entropy, policy_entropies, num_off_iters, execution_time, full_entropy,
                          heatmap_image, heatmap_entropy, backtrack_iters, backtrack_lr):
     # Log to Tensorboard
@@ -380,15 +414,15 @@ def log_epoch_statistics(writer, log_file, csv_file_1, csv_file_2, epoch,
     # print(fancy_grid)
 
 
-def log_off_iter_statistics(writer, csv_file_3, epoch, global_off_iter,
+def log_off_iter_statistics(writer, csv_file_4, epoch, global_off_iter,
                             num_off_iter, entropy, kls, lr):
     # Log to csv file 3
-    csv_file_3.write(f"{epoch},{num_off_iter}, {entropy[0]}, {entropy[1]}, {kls[0]}, {kls[1]}, {lr}\n")
+    csv_file_4.write(f"{epoch},{num_off_iter}, {entropy[0]}, {entropy[1]}, {kls[0]}, {kls[1]}, {lr}\n")
     # Also log to tensorboard
     writer.add_scalar("Off policy iter Loss A1", entropy[0], global_step=global_off_iter)
     writer.add_scalar("Off policy iter Loss A2", entropy[1], global_step=global_off_iter)
         
-    csv_file_3.flush()
+    csv_file_4.flush()
     writer.add_scalar("Off policy iter KL Agent 1", kls[0], global_step=global_off_iter)
     writer.add_scalar("Off policy iter KL Agent 2", kls[1], global_step=global_off_iter)
 
@@ -488,68 +522,73 @@ def mamepol(env,
     else:
         csv_file_2 = None
 
-    csv_file_3 = open(os.path.join(out_path, f"{env_name}_off_policy_iter.csv"), "w")
-    csv_file_3.write(",".join(['epoch', 'off_policy_iter', 'Entropy A1', 'Entropy A2', 'kl A1', 'kl A2', 'learning_rate']))
-    csv_file_3.write("\n")
+
+    csv_file_4 = open(os.path.join(out_path, f"{env_name}_off_policy_iter.csv"), "w")
+    csv_file_4.write(",".join(['epoch', 'off_policy_iter', 'Entropy A1', 'Entropy A2', 'kl A1', 'kl A2', 'learning_rate']))
+    csv_file_4.write("\n")
+
+    
 
     # At epoch 0 do not optimize, just log stuff for the initial policy
     epoch = 0
     t0 = time.time()
+    while epoch < num_epochs:
 
-    # Discrete Entropy 
-    states, actions, real_traj_lengths, next_states = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None)
+        # Discrete Entropy 
+        states, actions, real_traj_lengths, next_states = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None)
 
-    with torch.no_grad():
-        entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21 = compute_entropy(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths, beta)
-        # mi_a12, mi_a21 = compute_mutual_information(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths)
+        with torch.no_grad():
+            entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21 = compute_entropy(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths, beta)
+            # mi_a12, mi_a21 = compute_mutual_information(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths)
 
 
 
-    execution_time = time.time() - t0
-    entropy = entropy.numpy()
+        execution_time = time.time() - t0
+        entropy = entropy.numpy()
 
-    if update_algo == "Centralized":
-        loss = [- entropy, -entropy]
-    elif update_algo == "Centralized_MI":
-        loss = [- entropy_mix.numpy(), -entropy_mix.numpy()]
-    elif update_algo == "Centralized_MI_KL":
-        loss = [- entropy_mix.numpy() + beta*kl_a12.numpy(), -entropy_mix.numpy() + beta*kl_a21.numpy()]
-    elif update_algo == "Decentralized":
-        loss = [- entropy_a1.numpy(), -entropy_a2.numpy()]
-    elif update_algo == "Decentralized_MI":
-        loss = [- entropy_a1.numpy() + beta*mi_a12.numpy(), -entropy_a2.numpy() + beta*mi_a21.numpy() ]
-    elif update_algo == "Decentralized_KL":
-        loss = [- entropy_a1.numpy() - beta*kl_a12.numpy(), -entropy_a2.numpy() - beta*kl_a21.numpy() ]
-    else:
-        raise NotImplementedError
+        if update_algo == "Centralized":
+            loss = [- entropy, -entropy]
+        elif update_algo == "Centralized_MI":
+            loss = [- entropy_mix.numpy(), -entropy_mix.numpy()]
+        elif update_algo == "Centralized_MI_KL":
+            loss = [- entropy_mix.numpy() + beta*kl_a12.numpy(), -entropy_mix.numpy() + beta*kl_a21.numpy()]
+        elif update_algo == "Decentralized":
+            loss = [- entropy_a1.numpy(), -entropy_a2.numpy()]
+        elif update_algo == "Decentralized_MI":
+            loss = [- entropy_a1.numpy() + beta*mi_a12.numpy(), -entropy_a2.numpy() + beta*mi_a21.numpy() ]
+        elif update_algo == "Decentralized_KL":
+            loss = [- entropy_a1.numpy() - beta*kl_a12.numpy(), -entropy_a2.numpy() - beta*kl_a21.numpy() ]
+        else:
+            raise NotImplementedError
 
-    # Heatmap
-    if heatmap_discretizer is not None:
-        _, heatmap_entropies, heatmap_image = get_heatmap(env, behavioral_policies, heatmap_discretizer, heatmap_episodes, heatmap_num_steps, heatmap_cmap, heatmap_interp, heatmap_labels)
-    else:
-        heatmap_entropies = None
-        heatmap_image = None
+        # Heatmap
+        if heatmap_discretizer is not None:
+            _, heatmap_entropies, heatmap_image = get_heatmap(env, behavioral_policies, heatmap_discretizer, heatmap_episodes, heatmap_num_steps, heatmap_cmap, heatmap_interp, heatmap_labels)
+        else:
+            heatmap_entropies = None
+            heatmap_image = None
     
     # Save initial policy
-    for agent in range(env.n_agents):
-        torch.save(behavioral_policies[agent].state_dict(), os.path.join(out_path, f"{epoch}-policy-{agent}"))
+    # for agent in range(env.n_agents):
+    #     torch.save(behavioral_policies[agent].state_dict(), os.path.join(out_path, f"{epoch}-policy-{agent}"))
     
-    # Log statistics for the initial policy
-    log_epoch_statistics(
-            writer=writer, log_file=log_file, csv_file_1=csv_file_1, csv_file_2=csv_file_2,
-            epoch=epoch,
-            loss=loss,
-            entropy=[entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21],
-            policy_entropies = [np.log(4), np.log(4)],
-            execution_time=execution_time,
-            num_off_iters=0,
-            full_entropy=None,
-            heatmap_image=heatmap_image,
-            heatmap_entropy=heatmap_entropies,
-            backtrack_iters=None,
-            backtrack_lr=None
-        )
-
+        # Log statistics for the initial policy
+        log_epoch_statistics(
+                writer=writer, log_file=log_file, csv_file_1=csv_file_1, csv_file_2=csv_file_2,
+                epoch=epoch,
+                loss=loss,
+                entropy=[entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21],
+                policy_entropies = [np.log(4), np.log(4)],
+                execution_time=execution_time,
+                num_off_iters=0,
+                full_entropy=None,
+                heatmap_image=heatmap_image,
+                heatmap_entropy=heatmap_entropies,
+                backtrack_iters=None,
+                backtrack_lr=None
+            )
+        epoch += 1
+    return behavioral_policies
     # Main Loop
     global_num_off_iters = 0
 
@@ -596,7 +635,7 @@ def mamepol(env,
                 global_num_off_iters += 1
 
                 # Log statistics for this off policy iteration
-                log_off_iter_statistics(writer, csv_file_3, epoch, global_num_off_iters, num_off_iters - 1, entropy, kls, learning_rate)
+                log_off_iter_statistics(writer, csv_file_4, epoch, global_num_off_iters, num_off_iters - 1, entropy, kls, learning_rate)
 
                 # Update for which agent the process should go on
                 kl_threshold_reacheds = [kl >= kl_threshold for kl in kls]

@@ -309,8 +309,14 @@ def matrpo(
                 )
                 return gain
 
-            p0_a, _, _ = policy.forward(epoch_states)
-            p0 = p0_a.detach()
+            if env.discrete:
+            # p0_a, _, _ = policy.forward(epoch_states)
+                p0_a, _ = policy.forward(epoch_states)
+                p0 = p0_a.detach()
+            else:
+                mu0, _ = policy(epoch_states)
+                mu0 = mu0.detach()
+                log_std0 = policy.log_std.detach()
             
 
             def compute_kl():
@@ -318,8 +324,20 @@ def matrpo(
                 Computes KL(policy_old||policy_new)
                 or according to the following notation KL(0||1)
                 """
-                p1, _, _ = policy.forward(epoch_states)
-                return (p0*torch.log(p0/p1)).sum(dim=1).mean()
+                if env.discrete:
+                    p1, _ = policy.forward(epoch_states)
+                    return (p0*torch.log(p0/p1)).sum(dim=1).mean()
+                else:
+                    mu1, _ = policy(epoch_states)
+                    log_std1 = policy.log_std
+
+                    var0 = torch.exp(log_std0)**2
+                    var1 = torch.exp(log_std1)**2
+                    return (
+                        (0.5 * ((var0 + (mu1-mu0)**2) / (var1 + 1e-7) - 1)
+                        + log_std1 - log_std0)
+                    ).sum(dim=1).mean()
+                
                 
 
             def hessian_vector_product(x):

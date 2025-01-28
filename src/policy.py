@@ -176,7 +176,7 @@ def train_supervised(env, policy, train_steps=100, batch_size=5000, agent_id=0):
         optimizer.zero_grad()
 
         if dict_like_obs:
-            states = torch.tensor([env.observation_space.sample()['observation'] for _ in range(50)], dtype=float_type)
+            states = torch.tensor([env.observation_space.sample()['observation'] for _ in range(500)], dtype=float_type)
         else:
             states = torch.tensor([env.observation_space.sample()[env.state_indeces[agent_id]] for _ in range(50)], dtype=float_type)
 
