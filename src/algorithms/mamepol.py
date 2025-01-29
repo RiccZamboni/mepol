@@ -482,7 +482,8 @@ def mamepol(env,
         # Seed everything
         np.random.seed(seed)
         torch.manual_seed(seed)
-        # env.reset(seed)
+        env.set_seed(seed)
+        env.reset()
 
     # Create a behavioral, a target policy and a tmp policy used to save valid target policies
     # (those with kl <= kl_threshold) during off policy opt
@@ -532,63 +533,61 @@ def mamepol(env,
     # At epoch 0 do not optimize, just log stuff for the initial policy
     epoch = 0
     t0 = time.time()
-    while epoch < num_epochs:
 
-        # Discrete Entropy 
-        states, actions, real_traj_lengths, next_states = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None)
+    # Discrete Entropy 
+    states, actions, real_traj_lengths, next_states = collect_particles_parallel(env, behavioral_policies, num_traj, traj_len, num_workers, None)
 
-        with torch.no_grad():
-            entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21 = compute_entropy(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths, beta)
-            # mi_a12, mi_a21 = compute_mutual_information(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths)
-
+    with torch.no_grad():
+        entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21 = compute_entropy(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths, beta)
+        # mi_a12, mi_a21 = compute_mutual_information(env, behavioral_policies, behavioral_policies, states, actions, num_traj, real_traj_lengths)
 
 
-        execution_time = time.time() - t0
-        entropy = entropy.numpy()
 
-        if update_algo == "Centralized":
-            loss = [- entropy, -entropy]
-        elif update_algo == "Centralized_MI":
-            loss = [- entropy_mix.numpy(), -entropy_mix.numpy()]
-        elif update_algo == "Centralized_MI_KL":
-            loss = [- entropy_mix.numpy() + beta*kl_a12.numpy(), -entropy_mix.numpy() + beta*kl_a21.numpy()]
-        elif update_algo == "Decentralized":
-            loss = [- entropy_a1.numpy(), -entropy_a2.numpy()]
-        elif update_algo == "Decentralized_MI":
-            loss = [- entropy_a1.numpy() + beta*mi_a12.numpy(), -entropy_a2.numpy() + beta*mi_a21.numpy() ]
-        elif update_algo == "Decentralized_KL":
-            loss = [- entropy_a1.numpy() - beta*kl_a12.numpy(), -entropy_a2.numpy() - beta*kl_a21.numpy() ]
-        else:
-            raise NotImplementedError
+    execution_time = time.time() - t0
+    entropy = entropy.numpy()
 
-        # Heatmap
-        if heatmap_discretizer is not None:
-            _, heatmap_entropies, heatmap_image = get_heatmap(env, behavioral_policies, heatmap_discretizer, heatmap_episodes, heatmap_num_steps, heatmap_cmap, heatmap_interp, heatmap_labels)
-        else:
-            heatmap_entropies = None
-            heatmap_image = None
-    
+    if update_algo == "Centralized":
+        loss = [- entropy, -entropy]
+    elif update_algo == "Centralized_MI":
+        loss = [- entropy_mix.numpy(), -entropy_mix.numpy()]
+    elif update_algo == "Centralized_MI_KL":
+        loss = [- entropy_mix.numpy() + beta*kl_a12.numpy(), -entropy_mix.numpy() + beta*kl_a21.numpy()]
+    elif update_algo == "Decentralized":
+        loss = [- entropy_a1.numpy(), -entropy_a2.numpy()]
+    elif update_algo == "Decentralized_MI":
+        loss = [- entropy_a1.numpy() + beta*mi_a12.numpy(), -entropy_a2.numpy() + beta*mi_a21.numpy() ]
+    elif update_algo == "Decentralized_KL":
+        loss = [- entropy_a1.numpy() - beta*kl_a12.numpy(), -entropy_a2.numpy() - beta*kl_a21.numpy() ]
+    else:
+        raise NotImplementedError
+
+    # Heatmap
+    if heatmap_discretizer is not None:
+        _, heatmap_entropies, heatmap_image = get_heatmap(env, behavioral_policies, heatmap_discretizer, heatmap_episodes, heatmap_num_steps, heatmap_cmap, heatmap_interp, heatmap_labels)
+    else:
+        heatmap_entropies = None
+        heatmap_image = None
+
     # Save initial policy
-    # for agent in range(env.n_agents):
-    #     torch.save(behavioral_policies[agent].state_dict(), os.path.join(out_path, f"{epoch}-policy-{agent}"))
+    for agent in range(env.n_agents):
+         torch.save(behavioral_policies[agent].state_dict(), os.path.join(out_path, f"{epoch}-policy-{agent}"))
     
         # Log statistics for the initial policy
-        log_epoch_statistics(
-                writer=writer, log_file=log_file, csv_file_1=csv_file_1, csv_file_2=csv_file_2,
-                epoch=epoch,
-                loss=loss,
-                entropy=[entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21],
-                policy_entropies = [np.log(4), np.log(4)],
-                execution_time=execution_time,
-                num_off_iters=0,
-                full_entropy=None,
-                heatmap_image=heatmap_image,
-                heatmap_entropy=heatmap_entropies,
-                backtrack_iters=None,
-                backtrack_lr=None
-            )
-        epoch += 1
-    return behavioral_policies
+    log_epoch_statistics(
+            writer=writer, log_file=log_file, csv_file_1=csv_file_1, csv_file_2=csv_file_2,
+            epoch=epoch,
+            loss=loss,
+            entropy=[entropy, entropy_mix, entropy_a1, entropy_a2, mi_a12, mi_a21, kl_a12, kl_a21],
+            policy_entropies = [np.log(4), np.log(4)],
+            execution_time=execution_time,
+            num_off_iters=0,
+            full_entropy=None,
+            heatmap_image=heatmap_image,
+            heatmap_entropy=heatmap_entropies,
+            backtrack_iters=None,
+            backtrack_lr=None
+        )
+    
     # Main Loop
     global_num_off_iters = 0
 

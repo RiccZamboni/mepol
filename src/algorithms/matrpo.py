@@ -188,9 +188,11 @@ def matrpo(
     # Seed everything
     if seed is None:
         seed = np.random.randint(2**16)
-        env.seed(seed)
-        torch.manual_seed(seed)
-        # env.reset(seed)
+    
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    env.set_seed(seed)
+    env.reset()
 
     # Set value function optimizer
     vfunc_optimizers = []

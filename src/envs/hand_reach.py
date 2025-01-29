@@ -23,6 +23,7 @@ class HandReach(gym.Wrapper):
         self.a2_ind = self.distribution_indices[2]
         self.discrete = False
         self.discretizer = None
+        self.epsilon = 0.1
 
     def set_discretizer(self, discretizer=None):
         self.discretizer = discretizer
@@ -30,18 +31,20 @@ class HandReach(gym.Wrapper):
         self.dim_states_a1 = tuple([self.discretizer.bins_sizes[0], self.discretizer.bins_sizes[1]])
         self.dim_states_a2 = tuple([self.discretizer.bins_sizes[2], self.discretizer.bins_sizes[3]]) 
     
-    def seed(self, seed=None):
-        return super().seed(seed)
+    def set_seed(self, seed=None):
+        self.seed = seed
 
     def step(self, action):
         obs_data, reward, terminated, truncated, info = super().step(action)
         # print(obs_data)
         # obs = obs_data[0]
+        distance = np.sqrt((obs_data[4] - obs_data[8])**2 + (obs_data[5] - obs_data[9])**2)
+        reward = 10. if distance <= self.epsilon else 0.
         s = self.discretizer.discretize([obs_data[0],obs_data[2],obs_data[1],obs_data[3]])
         return s, reward, terminated, info
 
     def reset(self):
-        obs_data = super().reset()
+        obs_data = self.env.reset(seed = self.seed)
         return self.discretizer.discretize([obs_data[0][0],obs_data[0][2],obs_data[0][1],obs_data[0][3]])
 
     def render(self, mode='human'):
