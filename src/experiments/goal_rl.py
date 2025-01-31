@@ -151,7 +151,7 @@ for agent in range(env.n_agents):
             nn.init.orthogonal_(module.weight)
     vfuncs.extend([vfunc])
 
-user_path = os.path.dirname(__file__), "..", "..", "pretrained/"
+user_path = os.path.join(os.path.dirname(__file__), "..", "..", "pretrained/")
 policies = []
 for agent in range(env.n_agents):
     if args.policy_init is not None:
