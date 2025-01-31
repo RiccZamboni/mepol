@@ -151,12 +151,13 @@ for agent in range(env.n_agents):
             nn.init.orthogonal_(module.weight)
     vfuncs.extend([vfunc])
 
+user_path = os.path.dirname(__file__), "..", "..", "pretrained/"
 policies = []
 for agent in range(env.n_agents):
     if args.policy_init is not None:
         kind = args.policy_init.replace("/", "__")
         policy = create_policy(env.discrete)
-        policy_path = "/Users/riccardozamboni/Documents/PhD/Git/mepol/pretrained/" + args.policy_init + "policy-" + str(agent)
+        policy_path = user_path + args.policy_init + "policy-" + str(agent)
         current_directory = os.path.dirname(os.path.abspath(__file__))
         policy.load_state_dict(torch.load(policy_path))
         policies.extend([policy])
