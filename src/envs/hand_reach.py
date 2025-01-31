@@ -23,7 +23,7 @@ class HandReach(gym.Wrapper):
         self.a2_ind = self.distribution_indices[2]
         self.discrete = False
         self.discretizer = None
-        self.epsilon = 0.1
+        self.epsilon = 0.05
 
     def set_discretizer(self, discretizer=None):
         self.discretizer = discretizer
@@ -38,8 +38,12 @@ class HandReach(gym.Wrapper):
         obs_data, reward, terminated, truncated, info = super().step(action)
         # print(obs_data)
         # obs = obs_data[0]
-        distance = np.sqrt((obs_data[4] - obs_data[8])**2 + (obs_data[5] - obs_data[9])**2)
-        reward = 10. if distance <= self.epsilon else 0.
+        tip_x = obs_data[8]
+        tip_y = obs_data[9]
+        target_x = -0.21 # obs_data[4]
+        target_y = 0.21 #obs_data[5]
+        distance = np.sqrt((tip_x- target_x)**2 + (tip_y - target_y)**2)
+        reward = 1. if distance <= self.epsilon else 0.
         s = self.discretizer.discretize([obs_data[0],obs_data[2],obs_data[1],obs_data[3]])
         return s, reward, terminated, info
 

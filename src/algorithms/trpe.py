@@ -446,7 +446,7 @@ def policy_update(env, thresholds, optimizers, behavioral_policies, target_polic
     return losses, numeric_error
 
 
-def mamepol(env, 
+def trpe(env, 
             env_name, 
             state_filter, 
             create_policy, 

@@ -78,7 +78,7 @@ exp_spec = {
     },
     'HandReach': {
         'env_create': lambda: ErgodicEnv(HandReach()),
-        'discretizer_create': lambda env: Discretizer([[-1, 1], [-1, 1], [-1, 1], [-1, 1]], [5, 5, 5, 5], lambda s: [s[0], s[2], s[1], s[3]]),
+        'discretizer_create': lambda env: Discretizer([[-1, 1], [-1, 1], [-1, 1], [-1, 1]], [10, 10, 10, 10], lambda s: [s[0], s[2], s[1], s[3]]),
         'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
         'log_std_init': -0.5,

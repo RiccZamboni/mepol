@@ -11,7 +11,7 @@ from src.envs.discretizer import Discretizer
 from src.envs.rooms import Rooms
 from src.envs.push_box import PushBox
 from src.envs.wrappers import ErgodicEnv
-from src.algorithms.mamepol import mamepol
+from src.algorithms.trpe import trpe
 from src.policy import GaussianPolicy, DiscretePolicy, train_supervised
 
 
@@ -123,7 +123,7 @@ exp_spec = {
     },
     'HandReach': {
         'env_create': lambda: ErgodicEnv(HandReach()),
-        'discretizer_create': lambda env: Discretizer([[-1, 1], [-1, 1], [-1, 1], [-1, 1]], [5, 5, 5, 5], lambda s: [s[0], s[2], s[1], s[3]]),
+        'discretizer_create': lambda env: Discretizer([[-1, 1], [-1, 1], [-1, 1], [-1, 1]], [10, 10, 10, 10], lambda s: [s[0], s[2], s[1], s[3]]),
         'hidden_sizes': [64, 64],
         'activation': nn.ReLU,
         'log_std_init': -0.5,
@@ -217,7 +217,7 @@ with open(os.path.join(out_path, 'log_info.txt'), 'w') as f:
         args.seed = np.random.randint(2**16-1)
         f.write(f"Setting random seed {args.seed}\n")
 
-mamepol(
+trpe(
     env=env,
     env_name=args.env,
     state_filter=state_filter,
